@@ -1,0 +1,12 @@
+<<
+>>=
+**
+identifier
+()
+!=
+12
+12.39
+12.e-3
+.12
+x.y
+"string tests"

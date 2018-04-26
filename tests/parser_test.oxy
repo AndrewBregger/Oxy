@@ -1,0 +1,37 @@
+Inpired by an artcle from reddit discussing a syntax for combining if and match/switch stucture into a
+unified stucture that support both types of conditionals.
+
+The semantic meaning would change when it is this style of if.
+if x {
+  | in 10..20: {
+
+  },
+  | < 10: {
+
+  },
+  | == 10 : {
+
+  },
+  | > 10: {
+
+  },
+  | _: {
+    
+  }
+}
+
+enum Bar {
+  Foo(...),
+  Bee(...)
+}
+
+let y = Bar.Foo(...)
+
+if y {
+  | Foo(...) {
+
+  }
+  | Bee(...) {
+
+  }
+}
