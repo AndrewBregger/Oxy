@@ -2,7 +2,7 @@
 
 File* read_file(const char* path) {
   File* file = (File*) malloc(sizeof(File)); 
-  file->fullpath = (char*) malloc(strlen(path));
+  file->fullpath = (char*) malloc(strlen(path) + 1);
 
   strcpy(file->fullpath, path);
 

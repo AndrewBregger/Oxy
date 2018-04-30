@@ -10,7 +10,10 @@ const char* indent(int i) {
   if(i == 0)
     return "";
 
+  // tabbing is two spaces
+  i *= 2;
   char* buffer = NULL;
+  
   while(--i >= 0)
     buf_push(buffer, ' ');
   return buffer;
@@ -35,23 +38,24 @@ void print_ident_(Ident* ident, int i) {
   printf("%sIdent(%s)\n", indent(i), ident->value);
 }
 
-void print_expr_list(Expr** e, u32 num, u32 i) {
+void print_expr_list(Expr** e, u32 num, u32 in) {
   for(u32 i = 0; i < num; ++i)
-    print_expr_(e[i], i);
+    print_expr_(e[i], in);
 }
 
-void print_stmt_list(Stmt** e, u32 num, u32 i) {
+void print_stmt_list(Stmt** e, u32 num, u32 in) {
   for(u32 i = 0; i < num; ++i)
-    print_stmt_(e[i], i);
+    print_stmt_(e[i], in);
 }
 
-void print_item_list(Item** e, u32 num, u32 i) {
+void print_item_list(Item** e, u32 num, u32 in) {
   for(u32 i = 0; i < num; ++i)
-    print_item_(e[i], i);
+    print_item_(e[i], in);
 }
 
 
 void print_expr_(Expr* expr, int i) {
+  if(!expr) return;
   printf("%s%s\n", indent(i), expr_string(expr->kind));
   switch(expr->kind) {
     case Name: {
@@ -86,7 +90,7 @@ void print_expr_(Expr* expr, int i) {
     } break;
     case DotFnCall: {
       print_expr_(expr->dotcall.operand, i + 1);
-      print_ident_(expr->dotcall.name, i + 1);
+      print_expr_(expr->dotcall.name, i + 1);
       print_expr_list(expr->dotcall.actuals, expr->dotcall.num_actuals, i + 1);
     } break;
     case If: {
@@ -127,10 +131,16 @@ void print_expr_(Expr* expr, int i) {
     } break;
     case PatternExpr: {
     } break;
+    case Assignment: {
+      print_token_(&expr->assign.op, i + 1);
+      print_expr_(expr->assign.variable, i + 1);
+      print_expr_(expr->assign.value, i + 1);
+    } break;
   }
 }
 
 void print_item_(Item* item, int i) {
+  if(!item) return;
   printf("%s%s\n", indent(i), item_string(item->kind));
   switch(item->kind) {
     case ItemLocal: {
@@ -161,10 +171,19 @@ void print_item_(Item* item, int i) {
 }
 
 void print_stmt_(Stmt* stmt, int i) {
+  if(!stmt) return;
   printf("%s%s\n", indent(i), stmt_string(stmt->kind));
   switch(stmt->kind) {
-    case ExprStmt:;
+    case ExprStmt:
+      print_expr_(stmt->expr, i + 1);
+      break;
+    case SemiStmt:
+      print_expr_(stmt->semi, i + 1);
+      break;
     case ItemStmt:;
+      print_item_(stmt->item, i + 1);
+      break;
+
   }
 }
 
@@ -173,13 +192,16 @@ void print_typespec_(TypeSpec* spec, int i) {
   printf("%s%s\n", indent(i), typespec_string(spec->kind));
   switch(spec->kind) {
     case TypeSpecNone: {
-
     } break;
     case TypeSpecName: {
-
+      print_ident_(spec->name.name, i + 1);
+    } break;
+    case TypeSpecPath: {
+      print_typespec_(spec->path.parent, i + 1);
+      print_typespec_(spec->path.elem, i + 1);
     } break;
     case TypeSpecFunc: {
-
+      
     } break;
     case TypeSpecArray: {
 

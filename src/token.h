@@ -13,7 +13,6 @@
   TOKEN_KIND(StrLiteral, "string literal") \
   TOKEN_KIND(CharLiteral, "character literal") \
   TOKEN_KIND(Identifier, "identifier") \
-  TOKEN_KIND(Newline, "newline") \
   TOKEN_KIND(OpenParen, "(") \
   TOKEN_KIND(CloseParen, ")") \
   TOKEN_KIND(OpenBrace, "[") \
@@ -150,6 +149,7 @@ const char** all_token_strings();
 bool is_literal(Token* token);
 bool is_identifier(Token* token);
 bool is_operator(Token* token);
+bool is_assignment(Token* token);
 
 typedef enum Assoc {
   Left,

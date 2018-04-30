@@ -1,6 +1,7 @@
 #include "lex.h"
 #include "token.h"
 #include "print.h"
+#include "report.h"
 
 #include <ctype.h>
 
@@ -18,10 +19,12 @@ typedef struct Scanner {
   u64 column;
   const char* source;
   u64 len;
+  File* file;
 } Scanner;
 
 Scanner new_scanner(File* file) {
   Scanner context;
+  context.file = file;
   context.index  = 0;
   context.line   = 1;
   context.column = 1;
@@ -42,6 +45,7 @@ Token* get_tokens(File* file, u32* num) {
       break;
 
   }
+  *num = buf_len(tokens);
   return tokens;
 }
 
@@ -52,6 +56,7 @@ Token scan_number(Scanner* scanner, u64 start);
 Token scan_character(Scanner* scanner);
 ExpectedType scan_literal_suffix(Scanner* scanner);
 char validate_escape(Scanner* scanner);
+Token scan_comment(Scanner* scanner);
 
 void advance(Scanner* scanner);
 
@@ -120,7 +125,8 @@ bool is_number(char ch) {
 Token scan_token(Scanner* scanner) {
   while(Current(scanner) == '\t' or
         Current(scanner) == ' '  or
-        Current(scanner) == '\v')
+        Current(scanner) == '\v' or
+        Current(scanner) == '\n')
     advance(scanner);
   if(is_eof(scanner))
     return BUILD_TOKEN(Tkn_Eof, scanner);
@@ -134,7 +140,7 @@ Token scan_token(Scanner* scanner) {
     Scanner save = *scanner;
     advance(scanner);
     switch(ch) {
-      case '\n': return BUILD_TOKEN(Tkn_Newline, &save);
+      // case '\n': return BUILD_TOKEN(Tkn_Newline, &save);
       case '(': return BUILD_TOKEN(Tkn_OpenParen, &save);
       case ')': return BUILD_TOKEN(Tkn_CloseParen, &save);
       case '[': return BUILD_TOKEN(Tkn_OpenBrace, &save);
@@ -143,6 +149,7 @@ Token scan_token(Scanner* scanner) {
       case '}': return BUILD_TOKEN(Tkn_CloseBracket, &save);
       case ',': return BUILD_TOKEN(Tkn_Comma, &save);
       case '~': return BUILD_TOKEN(Tkn_Tilde, &save);
+      case ';': return BUILD_TOKEN(Tkn_Semicolon, &save);
       case ':': {
         if(Check(':', scanner)) {
           advance(scanner);
@@ -172,12 +179,22 @@ Token scan_token(Scanner* scanner) {
       FourToken('*', Tkn_Astrick, Tkn_AstrickEqual, Tkn_AstrickAstrick, Tkn_AstrickAstrickEqual)
       FourToken('<', Tkn_Less, Tkn_LessEqual, Tkn_LessLess, Tkn_LessLessEqual)
       FourToken('>', Tkn_Greater, Tkn_GreaterEqual, Tkn_GreaterGreater, Tkn_GreaterGreaterEqual)
+      case '/': {
+        if(Current(scanner) == '/' or Current(scanner) == '*')
+          return scan_comment(scanner);
+        else if(Current(scanner) == '=')
+          return new_token(Tkn_SlashEqual, save.line, save.column, 2, save.index);
+        else
+          return BUILD_TOKEN(Tkn_Slash, &save);
+      }
       case '\'': {
         return scan_character(scanner);
       }
       case '"': {
         return scan_string(scanner);
       }
+      default:
+        scan_error(scanner->file, scanner->line, scanner->column, "unrecognized character: '%c'\n", Current(scanner));
     }
   }
   return BUILD_TOKEN(Tkn_Error, scanner);
@@ -218,6 +235,7 @@ Token scan_string(Scanner* scanner) {
 
 Token scan_number(Scanner* scanner, u64 start) {
   Scanner s = *scanner;
+  u32 base = 10;
   if(Current(scanner) == '0') {
     advance(scanner);
 
@@ -225,6 +243,7 @@ Token scan_number(Scanner* scanner, u64 start) {
        Current(scanner) == 'X') {
       advance(scanner);
       Scanner save = *scanner;
+      base = 16;
       while(isxdigit(Current(scanner)))
         advance(scanner);
 
@@ -236,12 +255,12 @@ Token scan_number(Scanner* scanner, u64 start) {
             Current(scanner) == 'B') {
       advance(scanner);
       Scanner save = *scanner;
+      base = 2;
       while(Current(scanner) == '1' or
             Current(scanner) == '0')
         advance(scanner);
 
       const char* str = substr(scanner->source, save.index, scanner->index - save.index);
-      printf("%s\n", str);
       u64 val = strtoll(str, NULL, 2);
       return new_integer_token(val, s.line, s.column, scanner->index - start, s.index);
     }
@@ -268,7 +287,8 @@ Token scan_number(Scanner* scanner, u64 start) {
         advance(scanner);
     else {
       // report errors
-      printf("Missing exponent in literal\n");
+      scan_error(scanner->file, scanner->line, scanner->column,
+        "Missing exponent in float literal\n");
     }
   }
   const char* tmp = substr(scanner->source, start, scanner->index - start);
@@ -304,6 +324,61 @@ Token scan_character(Scanner* scanner) {
       temp = Current(scanner);
   }
   return new_char_token(temp, save.line, save.column, 1, save.index);
+}
+
+Token scan_comment(Scanner* scanner) {
+  Scanner save = *scanner;
+  // the actual start is the previous character;
+  u64 start = save.index - 1;
+  if(Current(scanner) == '/') {
+    while(!is_eof(scanner) and Current(scanner) != '\n')
+      advance(scanner);
+    // takes the new line
+
+    return scan_token(scanner);
+    const char* src = substr(scanner->source, start, scanner->index - start);
+    advance(scanner);
+    Token token = new_token(Tkn_Comment, save.line, save.column, scanner->index - start, start);
+    token.literal.value_string.value = (char*) src;
+    token.literal.value_string.len = scanner->index - start;
+    return token;
+  }
+  else if(Current(scanner) == '*') {
+		int count = 1;
+		advance(scanner);
+		while(count) {
+			if(is_eof(scanner)) {
+				// report_scanner_error(filename, cursor, "failed to close block comment\n");
+        scan_error(scanner->file, scanner->line, scanner->column, "failed to close block comment\n");
+				break;
+			}
+			else if(Current(scanner) == '/') {
+        advance(scanner);
+				if(Current(scanner) == '*') {
+					advance(scanner);
+					++count;
+				}
+			}
+			else if(Current(scanner) == '*') {
+				advance(scanner);
+				if(Current(scanner) == '/') {
+					advance(scanner);
+					--count;
+				}
+			}
+			else {
+				advance(scanner);
+			}
+		}
+
+    return scan_token(scanner);
+    
+    const char* src = substr(scanner->source, start, scanner->index - start);
+    Token token = new_token(Tkn_Comment, save.line, save.column, scanner->index - start, start);
+    token.literal.value_string.value = (char*) src;
+    token.literal.value_string.len = scanner->index - start;
+    return token;
+  }
 }
 
 
@@ -356,7 +431,7 @@ char validate_escape(Scanner* scanner) {
 			return EscapeCharecterType::UnicodeShort;
     */
 		default:
-			// report_scanner_error(filename, cursor, "invalid escape character: %c\n", character);
+			scan_error(scanner->file, scanner->line, scanner->column, "invalid escape character: %c\n", Current(scanner));
     	// next();
       break;
 	}

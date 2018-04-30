@@ -24,6 +24,12 @@ const char* stmt_strings[] = {
 #undef STMTKIND
 };
 
+const char* pattern_strings[] = {
+  #define PATTERNKIND(n) #n,
+  PATTERNKINDS
+  #undef PATTERNKIND
+};
+
 Ident* new_ident(const char* name, SourceLoc loc) {
   Ident* ident = malloc(sizeof(Ident));
   ident->value = malloc(strlen(name) + 1);
@@ -51,7 +57,14 @@ TypeSpec* new_typespec(TypeSpecKind kind, Mutablity mut, SourceLoc loc) {
 TypeSpec* new_name_typespec(Ident* name, Mutablity mut, SourceLoc loc) {
 	TypeSpec* spec = new_typespec(TypeSpecName, mut, loc);
   // memory is allocated for the type spec
-  spec->name = name;
+  spec->name.name = name;
+  return spec;
+}
+
+TypeSpec* new_path_typespec(TypeSpec* parent, TypeSpec* elem, Mutablity mut, SourceLoc loc) {
+  TypeSpec* spec = new_typespec(TypeSpecPath, mut, loc);
+  spec->path.parent = parent;
+  spec->path.elem = elem;
   return spec;
 }
 
@@ -106,6 +119,12 @@ Stmt* new_stmt(StmtKind kind, SourceLoc loc) {
 Stmt* new_expr_stmt(Expr* expr, SourceLoc loc) {
   Stmt* stmt = new_stmt(ExprStmt, loc);
   stmt->expr = expr;
+  return stmt;
+}
+
+Stmt* new_semi_stmt(Expr* expr, SourceLoc loc) {
+  Stmt* stmt = new_stmt(SemiStmt, loc);
+  stmt->semi = expr;
   return stmt;
 }
 
@@ -180,7 +199,7 @@ Expr* new_field(Expr* operand, Ident* name, SourceLoc loc) {
   return expr;
 }
 
-Expr* new_dotfncall(Expr* operand, Ident* name, Expr** actuals, SourceLoc loc) {
+Expr* new_dotfncall(Expr* operand, Expr* name, Expr** actuals, SourceLoc loc) {
   Expr* expr = new_expr(DotFnCall, loc);
   expr->dotcall.operand = operand;
   expr->dotcall.name = name;
@@ -260,6 +279,14 @@ Expr* new_tuple(Expr** elems, SourceLoc loc) {
   Expr* expr = new_expr(Tuple, loc);
   expr->tuple.elems = elems;
   expr->tuple.num_elems = buf_len(elems);
+  return expr;
+}
+
+Expr* new_assign(Token op, Expr* variable, Expr* value, SourceLoc loc) {
+  Expr* expr = new_expr(Assignment, loc);
+  expr->assign.op = op;
+  expr->assign.variable = variable;
+  expr->assign.value = value;
   return expr;
 }
 
@@ -352,6 +379,10 @@ const char* typespec_string(TypeSpecKind kind) {
 	return type_strings[kind];
 }
 
+const char* pattern_string(PatternKind kind) {
+	return pattern_strings[kind];
+}
+
 void destroy_expr(Expr* expr) {
 	switch(expr->kind) {
     case Name: {
@@ -418,6 +449,9 @@ void destroy_expr(Expr* expr) {
 
     } break;
     case PatternExpr: {
+
+    } break;
+    case Assignment: {
 
     } break;
   }

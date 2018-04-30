@@ -111,6 +111,10 @@ bool is_operator(Token* token) {
   return Tkn_Plus <= token->kind and token->kind <= Tkn_PipeEqual;
 }
 
+bool is_assignment(Token* token) {
+  return Tkn_Equal <= token->kind and token->kind <= Tkn_PipeEqual;
+}
+
 bool is_identifier(Token* token) {
   return token->kind == Tkn_Identifier;
 }

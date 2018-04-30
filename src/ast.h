@@ -27,6 +27,7 @@ typedef struct TypeSpec TypeSpec;
 #define TYPESPECKINDS \
   TYPESPECKIND(TypeSpecNone) \
   TYPESPECKIND(TypeSpecName) \
+  TYPESPECKIND(TypeSpecPath) \
   TYPESPECKIND(TypeSpecFunc) \
   TYPESPECKIND(TypeSpecArray) \
   TYPESPECKIND(TypeSpecPtr) \
@@ -69,7 +70,14 @@ typedef struct TypeSpec {
   Type* type;
 
   union {
-    Ident* name;
+    struct {
+      Ident* name;
+      // generic params
+    } name;
+    struct {
+      TypeSpec* parent;
+      TypeSpec* elem;
+    } path;
     struct {
       TypeSpec** args;
       u32 num_args;
@@ -98,10 +106,11 @@ typedef struct TypeSpec {
 
 SourceLoc new_sourceloc(File* file, u64 line, u64 column, u64 span);
 
-
 TypeSpec* new_typespec(TypeSpecKind kind, Mutablity mut, SourceLoc loc);
 
 TypeSpec* new_name_typespec(Ident* name, Mutablity mut, SourceLoc loc);
+
+TypeSpec* new_path_typespec(TypeSpec* parent, TypeSpec* elem, Mutablity mut, SourceLoc loc);
 
 TypeSpec* new_func_typespec(TypeSpec** args, TypeSpec* ret,
   SourceLoc loc);
@@ -118,6 +127,7 @@ TypeSpec* new_tuple_typespec(TypeSpec** types, Mutablity mut, SourceLoc loc);
 
 #define STMTKINDS \
   STMTKIND(ExprStmt) \
+  STMTKIND(SemiStmt) \
   STMTKIND(ItemStmt)
 
 typedef enum StmtKind {
@@ -133,6 +143,7 @@ typedef struct Stmt {
 
   union{
     Expr* expr;
+    Expr* semi;
     Item* item;
   };
 } Stmt;
@@ -140,6 +151,8 @@ typedef struct Stmt {
 Stmt* new_stmt(StmtKind kind, SourceLoc loc);
 
 Stmt* new_expr_stmt(Expr* expr, SourceLoc loc);
+
+Stmt* new_semi_stmt(Expr* expr, SourceLoc loc);
 
 Stmt* new_item_stmt(Item* item, SourceLoc loc);
 
@@ -165,7 +178,8 @@ Stmt* new_item_stmt(Item* item, SourceLoc loc);
   EXPRKIND(Binding) \
   EXPRKIND(In) \
   EXPRKIND(Tuple) \
-  EXPRKIND(PatternExpr)
+  EXPRKIND(PatternExpr) \
+  EXPRKIND(Assignment)
 
 typedef enum ExprKind {
   #define EXPRKIND(n) n,
@@ -209,7 +223,7 @@ typedef struct Expr {
     } field;
     struct {
       Expr* operand;
-      Ident* name;
+      Expr* name;
       Expr** actuals;
       u32 num_actuals;
     } dotcall;
@@ -258,6 +272,11 @@ typedef struct Expr {
     struct {
       Pattern* pat;
     } pattern;
+    struct {
+      Token op;
+      Expr* variable;
+      Expr* value;
+    } assign;
   };
 } Expr;
 
@@ -270,7 +289,7 @@ Expr* new_unary(Token op, Expr* expr, SourceLoc loc);
 Expr* new_binary(Token op, Expr* lhs, Expr* rhs, SourceLoc loc);
 Expr* new_fncall(Expr* name, Expr** actuals, SourceLoc loc);
 Expr* new_field(Expr* operand, Ident* name, SourceLoc loc);
-Expr* new_dotfncall(Expr* operand, Ident* name, Expr** actuals,
+Expr* new_dotfncall(Expr* operand, Expr* name, Expr** actuals,
   SourceLoc loc);
 Expr* new_if(Expr* cond, Expr* body, Expr* else_if, SourceLoc loc);
 Expr* new_iflet();
@@ -284,6 +303,7 @@ Expr* new_block(Stmt** stmts, SourceLoc loc);
 Expr* new_binding(Expr* name, Expr* expr, SourceLoc loc);
 Expr* new_in(Expr* in, Expr* expr, SourceLoc loc);
 Expr* new_tuple(Expr** elem, SourceLoc loc);
+Expr* new_assign(Token op, Expr* variable, Expr* value, SourceLoc loc);
 
 #define ITEMKINDS \
   ITEMKIND(ItemLocal) \
@@ -362,11 +382,19 @@ Item* new_itemuse(Ident* name, Expr** memebers, SourceLoc loc);
 Item* new_itemmodule(Ident* name, Item** memebers, SourceLoc loc);
 Item* new_itemfield(TypeSpec* type, Ident* name, Expr* init, SourceLoc loc);
 
-#define PATTERNKINDS
+#define PATTERNKINDS \
+  PATTERNKIND(WildCard)\
+  PATTERNKIND(StructPattern) \
+  PATTERNKIND(TuplePattern) \
+  PATTERNKIND(RefPatter) \
+  PATTERNKIND(PointerPattern) \
+  PATTERNKIND(IdentPattern)
 
 
 typedef enum PatternKind {
-  StructPattern
+  #define PATTERNKIND(x) x,
+  PATTERNKINDS
+  #undef PATTERNKIND
 } PatternKind;
 
 typedef struct Pattern {
@@ -374,9 +402,29 @@ typedef struct Pattern {
   SourceLoc loc;
 
   union {
-    int x;
+    Token wildcard;
+    Ident* ident;
+    struct {
+      TypeSpec* path;
+      Pattern** elems;
+      u32 num_elems; 
+    } structure;
+    struct {
+      TypeSpec* path;
+      Pattern** elems;
+      u32 num_elems; 
+    } tuple;
+    struct {
+      Mutablity mut;
+      Pattern* pat;
+    } ref;
+    struct {
+      Mutablity mut;
+      Pattern* pat;
+    } ptr;
   };
 } Pattern;
+
 
 const char* item_string(ItemKind kind);
 const char* expr_string(ExprKind kind);
