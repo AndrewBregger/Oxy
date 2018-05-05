@@ -5,6 +5,7 @@ void print_item_(Item* item, int i);
 void print_stmt_(Stmt* stmt, int i);
 void print_typespec_(TypeSpec* spec, int i);
 void print_pattern_(Pattern* pattern, int i);
+void print_clause_(Clause* clause, int i);
 
 const char* indent(int i) {
   if(i == 0)
@@ -53,6 +54,10 @@ void print_item_list(Item** e, u32 num, u32 in) {
     print_item_(e[i], in);
 }
 
+void print_pattern_list(Pattern** p, u32 num, u32 in) {
+  for(u32 i = 0; i < num; ++i)
+    print_pattern_(p[i], in);
+}
 
 void print_expr_(Expr* expr, int i) {
   if(!expr) return;
@@ -98,11 +103,17 @@ void print_expr_(Expr* expr, int i) {
       print_expr_(expr->if_expr.body, i + 1);
       print_expr_(expr->if_expr.else_if, i + 1);
     } break;
+    case MatchIf: {
+      print_expr_(expr->matchif_expr.cond, i + 1);
+      for(int x = 0; x < expr->matchif_expr.num_body; ++x)
+        print_clause_(expr->matchif_expr.body[i], i + 1);
+    } break;
     case While: {
       print_expr_(expr->while_expr.cond, i + 1);
       print_expr_(expr->while_expr.body, i + 1);
     } break;
     case For: {
+      print_pattern_(expr->for_expr.pat, i + 1);
       print_expr_(expr->for_expr.cond, i + 1);
       print_expr_(expr->for_expr.body, i + 1);
     } break;
@@ -221,5 +232,54 @@ void print_typespec_(TypeSpec* spec, int i) {
   }
 }
 
+void print_mutablity(Mutablity mut, int i) {
+  printf("%s%s\n", indent(i), (mut == Immutable? "Immutable" : "Mutable"));
+}
+void print_pattern_(Pattern* pat, int i) {
+  if(!pat) return;
+  printf("%s%s\n", indent(i), pattern_string(pat->kind));
+  switch(pat->kind) {
+    case WildCard: {
+      print_token_(&pat->wildcard, i + 1);
+    } break;
+    case StructPattern: {
+      print_typespec_(pat->structure.path, i + 1);
+      print_pattern_list(pat->structure.elems, pat->structure.num_elems, i + 1);
+    } break;
+    case TuplePattern: {
+      print_pattern_list(pat->tuple.elems, pat->tuple.num_elems, i + 1);
+    } break;
+    case RefPattern: {
+      print_mutablity(pat->ref.mut, i + 1);
+      print_pattern_(pat->ref.pat, i + 1);
+    } break;
+    case PointerPattern: {
+      print_mutablity(pat->ptr.mut, i + 1);
+      print_pattern_(pat->ptr.pat, i + 1);
+    } break;
+    case IdentPattern: {
+      print_ident_(pat->ident, i + 1);
+    } break;
+    case LiteralPattern: {
+      print_literal_(&pat->literal, i + 1);
+    } break;
+
+  }
+}
+
+void print_clause_(Clause* clause, int i) {
+  print_pattern_list(clause->patterns, clause->num_patterns, i);
+  print_expr_(clause->body, i);
+}
+
+void note(const char* msg, ...) {
+  printf("\tNote: ");
+  va_list va;
+  va_start(va, msg);
+  vprintf(msg, va);
+  va_end(va);
+}
+
 void print_literal(Token* token) { print_literal_(token, 0); }
 void print_expr(Expr* expr) { print_expr_(expr, 0); }
+void print_pattern(Pattern* pat) { print_pattern_(pat, 0); }

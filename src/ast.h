@@ -159,18 +159,17 @@ Stmt* new_item_stmt(Item* item, SourceLoc loc);
 #define EXPRKINDS \
   EXPRKIND(Name) \
   EXPRKIND(Literal) \
-  EXPRKIND(StructLiteral) \
   EXPRKIND(CompoundLiteral) \
+  EXPRKIND(StructLiteral) \
   EXPRKIND(Unary) \
   EXPRKIND(Binary) \
   EXPRKIND(FnCall) \
   EXPRKIND(Field) \
   EXPRKIND(DotFnCall) \
   EXPRKIND(If) \
-  EXPRKIND(IfLet) \
+  EXPRKIND(MatchIf) \
   EXPRKIND(While) \
   EXPRKIND(For) \
-  EXPRKIND(Match) \
   EXPRKIND(Return) \
   EXPRKIND(Break) \
   EXPRKIND(Continue) \
@@ -187,6 +186,13 @@ typedef enum ExprKind {
   #undef EXPRKIND
 } ExprKind;
 
+typedef struct Clause {
+  Pattern** patterns;
+  u32 num_patterns;
+  Expr* body;
+  SourceLoc loc;
+} Clause;
+
 typedef struct Expr {
   ExprKind kind;
   SourceLoc loc;
@@ -199,6 +205,10 @@ typedef struct Expr {
       Expr** members;
       u32 num_members;
     } struct_lit;
+    struct {
+      Expr** elems;
+      u32 num_elems;
+    } comp_lit;
     struct {
       Expr** members;
       u32 num_members;
@@ -236,7 +246,7 @@ typedef struct Expr {
     // match if expression
     struct {
       Expr* cond;
-      Expr** body;
+      Clause** body;
       u32 num_body;
     } matchif_expr;
     struct {
@@ -244,6 +254,7 @@ typedef struct Expr {
       Expr* body;
     } while_expr;
     struct {
+      Pattern* pat;
       Expr* cond;
       Expr* body;
     } for_expr;
@@ -283,8 +294,8 @@ typedef struct Expr {
 Expr* new_expr(ExprKind kind, SourceLoc loc);
 Expr* new_name(Ident* name, SourceLoc loc);
 Expr* new_literal(Token token, SourceLoc loc);
+Expr* new_compoundliteral(Expr** elems, SourceLoc loc);
 Expr* new_structliteral(TypeSpec* name, Expr** member, SourceLoc loc);
-Expr* new_compoundliteral(Expr** member, SourceLoc loc);
 Expr* new_unary(Token op, Expr* expr, SourceLoc loc);
 Expr* new_binary(Token op, Expr* lhs, Expr* rhs, SourceLoc loc);
 Expr* new_fncall(Expr* name, Expr** actuals, SourceLoc loc);
@@ -292,10 +303,9 @@ Expr* new_field(Expr* operand, Ident* name, SourceLoc loc);
 Expr* new_dotfncall(Expr* operand, Expr* name, Expr** actuals,
   SourceLoc loc);
 Expr* new_if(Expr* cond, Expr* body, Expr* else_if, SourceLoc loc);
-Expr* new_iflet();
+Expr* new_matchif(Expr* cond, Clause** body, SourceLoc loc);
 Expr* new_while(Expr* cond, Expr* body, SourceLoc loc);
-Expr* new_for(Expr* cond, Expr* body, SourceLoc loc);
-Expr* new_match();
+Expr* new_for(Pattern* pat, Expr* cond, Expr* body, SourceLoc loc);
 Expr* new_return(Expr** expr, SourceLoc loc);
 Expr* new_break(Token token, SourceLoc loc);
 Expr* new_continue(Token token, SourceLoc loc);
@@ -304,6 +314,7 @@ Expr* new_binding(Expr* name, Expr* expr, SourceLoc loc);
 Expr* new_in(Expr* in, Expr* expr, SourceLoc loc);
 Expr* new_tuple(Expr** elem, SourceLoc loc);
 Expr* new_assign(Token op, Expr* variable, Expr* value, SourceLoc loc);
+Clause* new_clause(Pattern** pattern, Expr* body, SourceLoc loc);
 
 #define ITEMKINDS \
   ITEMKIND(ItemLocal) \
@@ -386,9 +397,10 @@ Item* new_itemfield(TypeSpec* type, Ident* name, Expr* init, SourceLoc loc);
   PATTERNKIND(WildCard)\
   PATTERNKIND(StructPattern) \
   PATTERNKIND(TuplePattern) \
-  PATTERNKIND(RefPatter) \
+  PATTERNKIND(RefPattern) \
   PATTERNKIND(PointerPattern) \
-  PATTERNKIND(IdentPattern)
+  PATTERNKIND(IdentPattern) \
+  PATTERNKIND(LiteralPattern)
 
 
 typedef enum PatternKind {
@@ -403,6 +415,7 @@ typedef struct Pattern {
 
   union {
     Token wildcard;
+    Token literal;
     Ident* ident;
     struct {
       TypeSpec* path;
@@ -410,7 +423,6 @@ typedef struct Pattern {
       u32 num_elems; 
     } structure;
     struct {
-      TypeSpec* path;
       Pattern** elems;
       u32 num_elems; 
     } tuple;
@@ -425,10 +437,26 @@ typedef struct Pattern {
   };
 } Pattern;
 
+Pattern* new_pattern(PatternKind kind, SourceLoc loc);
+
+Pattern* new_wildcard(Token token, SourceLoc loc);
+
+Pattern* new_ident_pat(Ident* ident, SourceLoc loc);
+
+Pattern* new_struct_pat(TypeSpec* spec, Pattern** elems, SourceLoc loc);
+
+Pattern* new_tuple_pat(Pattern** elems, SourceLoc loc);
+
+Pattern* new_ref_pat(Mutablity mut, Pattern* pat, SourceLoc loc);
+
+Pattern* new_ptr_pat(Mutablity mut, Pattern* pat, SourceLoc loc);
+
+Pattern* new_literal_pat(Token token, SourceLoc loc);
 
 const char* item_string(ItemKind kind);
 const char* expr_string(ExprKind kind);
 const char* stmt_string(StmtKind kind);
+const char* pattern_string(PatternKind kind);
 const char* typespec_string(TypeSpecKind kind);
 
 void destroy_expr(Expr* expr);

@@ -57,6 +57,7 @@
   TOKEN_KIND(CarrotEqual, "^=") \
   TOKEN_KIND(AmpersandEqual, "&=") \
   TOKEN_KIND(PipeEqual, "|=") \
+  TOKEN_KIND(Underscore, "_") \
   TOKEN_KIND(If, "if") \
   TOKEN_KIND(Else, "else") \
   TOKEN_KIND(Let, "let") \
@@ -76,6 +77,7 @@
   TOKEN_KIND(Use, "use") \
   TOKEN_KIND(And, "and") \
   TOKEN_KIND(Or, "or") \
+  TOKEN_KIND(In, "in") \
   TOKEN_KIND(True, "true") \
   TOKEN_KIND(False, "false")
   

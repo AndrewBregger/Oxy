@@ -7,7 +7,7 @@ File* read_file(const char* path) {
   strcpy(file->fullpath, path);
 
   FILE* f = fopen(path, "r");
-
+  if(!f) return NULL;
   fseek(f, 0, SEEK_END);
 
   u64 size = ftell(f);

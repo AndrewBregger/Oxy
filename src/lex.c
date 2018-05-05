@@ -150,6 +150,7 @@ Token scan_token(Scanner* scanner) {
       case ',': return BUILD_TOKEN(Tkn_Comma, &save);
       case '~': return BUILD_TOKEN(Tkn_Tilde, &save);
       case ';': return BUILD_TOKEN(Tkn_Semicolon, &save);
+      case '_': return BUILD_TOKEN(Tkn_Underscore, &save);
       case ':': {
         if(Check(':', scanner)) {
           advance(scanner);

@@ -184,4 +184,24 @@ match x {
 }
 ```
 
+### Patterns
+```
+// binds a value type value
+x
+
+// binds a value by reference
+&x
+
+// binds a pointer
+*x
+
+// match type and fields
+// Foo can be a struct or enum
+Foo(<pat>, <pat>, ...)
+
+// match type
+Foo(...)
+
+(<pat>, <pat>, ...)
+```
 # Extendend Bakus Naur Form

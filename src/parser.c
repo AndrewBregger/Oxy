@@ -98,7 +98,7 @@ bool check_(Parser* parser, TokenKind kind) {
 // }
 
 bool match_(Parser* parser, TokenKind kind) {
-  if(Current().kind == kind) {
+  if(check(kind)) {
     Consume();
     return true;
   }
@@ -210,11 +210,11 @@ Expr* parse_bottom_expr(Parser* parser) {
   Token current = Current();
   switch(current.kind) {
     case Tkn_If:
-      // return parse_if_expr(parser);
+      return parse_if_expr(parser);
     case Tkn_While:
-      // return parse_while_expr(parser);
+      return parse_while_expr(parser);
     case Tkn_For:;
-      // return parse_for_expr(parser);
+      return parse_for_expr(parser);
     case Tkn_Identifier:
       return parse_name_expr(parser);
     case Tkn_OpenParen: {
@@ -255,8 +255,23 @@ Expr* parse_bottom_expr(Parser* parser) {
     case Tkn_OpenBracket:
       return parse_block_expr(parser);
     // block expression
-    case Tkn_OpenBrace:;
-    // array and map literals
+    case Tkn_OpenBrace: {
+      // array and map literals
+      expect(Tkn_OpenBrace);
+      Expr** elems = NULL;
+      SourceLoc loc = loc_from_token(parser, current);
+      while(!check(Tkn_CloseBrace)) {
+        Expr* elem = parse_expr(parser);
+        if(elem) {
+          buf_push(elems, elem);
+          loc = expand_loc(loc, elem->loc);
+        }
+        match(Tkn_Comma);
+      }
+      expect(Tkn_CloseBrace);
+      loc.span += 1;
+      return new_compoundliteral(elems, loc);
+    }
     default:;
   }
 
@@ -330,6 +345,8 @@ Expr* parse_dot_call_expr(Parser* parser, Expr* already_parsed) {
         expr = new_fncall(expr, args, loc);
       } break;
       case Tkn_OpenBracket: {
+        if(parser->restrction & NO_STRUCT_LITERAL)
+          return expr;
         TypeSpec* type = expr_to_typespec(expr);
         expect(Tkn_OpenBracket);
         Expr** args = NULL;
@@ -364,14 +381,15 @@ Expr* parse_dot_call_expr(Parser* parser, Expr* already_parsed) {
         expect(Tkn_Colon);
 
         Expr* e = parse_expr(parser);
-        // i know the name isnt right but it does the same thing.
-        SourceLoc loc = expand_loc(expr->loc, e->loc);
-        loc.span += 1;
-        // the second term is to check if this name has generics.
-        if(expr->kind != Name and true) {
-          syntax_error(e->loc, "recieving term must be an identifier\n");
+        SourceLoc loc;
+        if(!e) {
+          syntax_error(loc_from_token(parser, Current()), "expecting primary expression following colon\n");
         }
-
+        else {
+          // i know the name isnt right but it does the same thing.
+          loc = expand_loc(expr->loc, e->loc);
+          loc.span += 1;
+        }
         expr = new_binding(expr, e, loc);
       } break;
       default:
@@ -421,8 +439,8 @@ Expr** parse_fn_arguments(Parser* parser) {
   bool expecting_expr = true;
   if(!check(Tkn_CloseParen)) {
     while(expecting_expr) {
-      printf("Token Loop: ");
-      print_token(&Current());
+      // printf("Token Loop: ");
+      // print_token(&Current());
       expecting_expr = false;
       Expr* expr = parse_expr(parser);
       if(expr) {
@@ -462,6 +480,300 @@ Ident* parse_ident(Parser* parser) {
   return NULL;
 }
 
+Expr* parse_match(Parser* parser, Expr* cond);
+Expr* parse_if_body(Parser* parser, Expr* cond);
+Clause* parse_clause(Parser* parser);
+
+Expr* parse_if_expr(Parser* parser) {
+  Debug();
+  expect(Tkn_If);
+  Expr* cond = parse_expr_with_res(parser, NO_STRUCT_LITERAL);
+  if(check(Tkn_OpenBracket)) {
+    if(Next().kind == Tkn_Pipe) {
+      Consume();
+      return parse_match(parser, cond);
+    }
+    else
+      return parse_if_body(parser, cond);
+  }
+  else {
+    syntax_error(loc_from_token(parser, Current()), "expecting open bracket\n");
+    note("if body must start with '}'\n");
+  }
+  return NULL;
+}
+
+Pattern* parse_pattern(Parser* parser);
+
+Expr* parse_for_expr(Parser* parser) {
+  Token top = Current();
+  expect(Tkn_For);
+  Pattern* pat = parse_pattern(parser);
+  SourceLoc loc = loc_from_token(parser, Current());
+  if(!pat) {
+    syntax_error(loc, "execting pattern in for\n");
+    sync(parser);
+  }
+  if(match(Tkn_In)) {
+    Expr* expr = parse_expr_with_res(parser, NO_STRUCT_LITERAL);
+    if(check(Tkn_OpenBracket)) {
+      Expr* body = parse_block_expr(parser);
+      SourceLoc l = loc_from_token(parser, top);
+      l = expand_loc(l, pat->loc);
+      l = expand_loc(l, expr->loc);
+      l = expand_loc(l, body->loc);
+      return new_for(pat, expr, body, l);
+    }
+    else {
+      loc = loc_from_token(parser, Current());
+      syntax_error(loc, "expecting '{' in a block\n");
+      sync(parser);
+    }
+  }
+  else {
+    syntax_error(loc, "expecting 'in' in for\n");
+    sync(parser);
+  }
+
+  return NULL;
+}
+
+Expr* parse_while_expr(Parser* parser) {
+  Token top = Current();
+  expect(Tkn_While);
+  Expr* cond = parse_expr_with_res(parser, NO_STRUCT_LITERAL);
+  if(check(Tkn_OpenBracket)) {
+    Expr* body = parse_block_expr(parser);
+    SourceLoc l = loc_from_token(parser, top);
+    l = expand_loc(l, cond->loc);
+    l = expand_loc(l, body->loc);
+    return new_while(cond, body, l);
+  }
+  else {
+    SourceLoc loc = loc_from_token(parser, Current());
+    syntax_error(loc, "expecting '{' to begin a body\n");
+    sync(parser);
+  }
+  return NULL;
+}
+
+Mutablity parse_mutability(Parser* parser);
+Pattern* parse_ident_pattern(Parser* parser);
+
+Pattern* parse_pattern(Parser* parser) {
+  Debug();
+  Token current = Current();
+  switch(current.kind) {
+    case Tkn_Identifier:
+      return parse_ident_pattern(parser);
+    case Tkn_OpenParen: {
+      // @Note(Andrew): Maybe this should be valid, at the moment it isnt.
+      // (Io(_), z, y)
+      Pattern** pats = NULL;
+      Consume();
+      SourceLoc loc = loc_from_token(parser, current);
+      while(!check(Tkn_CloseParen)) {
+        Pattern* pat = parse_pattern(parser);
+        if(pat) {
+          if(pat->kind == StructPattern || pat->kind == TuplePattern) {
+            syntax_error(pat->loc, "tuple elements must be build to a name\n");
+          }
+          buf_push(pats, pat);
+          loc = expand_loc(loc, pat->loc);
+        }
+        else {
+          syntax_error(loc_from_token(parser, Current()), "expecting pattern\n");
+          break;
+        }
+        if(!match(Tkn_Comma))
+          break;
+      }
+      expect(Tkn_CloseParen);
+      loc.span += 1;
+      return new_tuple_pat(pats, loc);
+    } break;
+    case Tkn_Ampersand: {
+      Consume();
+      Mutablity mut = parse_mutability(parser);
+      Pattern* pat = parse_pattern(parser);
+      if(pat->kind != IdentPattern) {
+        syntax_error(pat->loc, "reference pattern must bind to a name\n");
+      }
+      return new_ref_pat(mut, pat, pat->loc);
+    } break;
+    case Tkn_Astrick: {
+      Consume();
+      Mutablity mut = parse_mutability(parser);
+      Pattern* pat = parse_pattern(parser);
+      if(pat->kind != IdentPattern) {
+        syntax_error(pat->loc, "pointer pattern must bind to a name\n");
+      }
+      return new_ptr_pat(mut, pat, pat->loc);
+    } break;
+    case Tkn_Underscore: {
+      Consume();
+      return new_wildcard(current, loc_from_token(parser, current));
+    }
+    default:;
+  }
+  if(is_literal(&current)) {
+    Consume();
+    return new_literal_pat(current, loc_from_token(parser, current));
+  }
+  return NULL;
+}
+
+Mutablity parse_mutability(Parser* parser) {
+  Debug();
+  Token curr = Current();
+  if(curr.kind == Tkn_Mut) {
+    Consume();
+    return Mutable;
+  }
+  else
+    return Immutable;
+}
+
+Pattern* parse_stuct_pattern(Parser* parser) {
+  Debug();
+  TypeSpec* spec = parse_typespec(parser);
+  if(match(Tkn_OpenParen)) {
+    Pattern** pats = NULL;
+    // @TODO(Andrew): handle ... case
+    SourceLoc loc = spec->loc;
+    while(!check(Tkn_CloseParen)) {
+      Pattern* pat = parse_pattern(parser);
+      if(pat && (pat->kind == StructPattern || pat->kind == TuplePattern)) {
+        syntax_error(pat->loc, "invalid sub pattern in structure pattern\n");
+        sync(parser);
+      }
+      if(pat) {
+        buf_push(pats, pat);
+        loc = expand_loc(loc, pat->loc);
+      }
+      else {
+        syntax_error(loc_from_token(parser, Current()), "expecting pattern, found: '%s'\n", get_token_string(&Current()));
+        sync(parser);
+      }
+
+      if(!match(Tkn_Comma))
+        break;
+    }
+    expect(Tkn_CloseParen);
+    loc.span += 1;
+    return new_struct_pat(spec, pats, loc);
+  }
+  else {
+    syntax_error(loc_from_token(parser, Current()), "expecting '(' follow type path\n");
+    sync(parser);
+  }
+  return NULL;
+}
+
+Pattern* parse_ident_pattern(Parser* parser) {
+  Debug();
+  if(check(Tkn_Identifier)) {
+    Token next = Next();
+    if(next.kind == Tkn_Period)
+      return parse_stuct_pattern(parser);
+    else {
+      if(next.kind == Tkn_OpenParen)
+        return parse_stuct_pattern(parser);
+      else {
+        Ident* ident = parse_ident(parser);
+        return new_ident_pat(ident, ident->loc);
+      } 
+    }
+  }
+  return NULL;
+}
+
+Pattern** parse_patterns(Parser* parser);
+
+Clause* parse_clause(Parser* parser) {
+  Debug();
+  Pattern** patterns = parse_patterns(parser);
+  SourceLoc loc;
+  if(patterns == NULL)
+    syntax_error(loc_from_token(parser, Current()), "expecting pattern in matching if\n");
+  else {
+    loc = patterns[0]->loc; 
+    for(u32 i = 1; i < buf_len(patterns); ++i)
+      loc = expand_loc(loc, patterns[i]->loc);
+  }
+  Expr* expr = parse_expr(parser);
+  return new_clause(patterns, expr, loc);
+}
+
+Pattern** parse_patterns(Parser* parser) {
+  Debug();
+  Pattern** pats = NULL;
+  do {
+    Pattern* pat = parse_pattern(parser);
+    if(pat) {
+      buf_push(pats, pat);
+    }
+    else {
+      syntax_error(loc_from_token(parser, Current()), "expecting pattern in match clause\n");
+      sync(parser);
+    }
+  } while(match(Tkn_Pipe));
+  return pats;
+}
+
+
+Expr* parse_match(Parser* parser, Expr* cond) {
+  Debug();
+  Clause** clauses = NULL;
+
+  // @TODO(Andrew): better error checking for when there are more clauses
+  // but there isnt a comma delimiting them.
+  do {
+    if(match(Tkn_Pipe)) {
+      Clause* clause = parse_clause(parser);
+      if(clause)
+        buf_push(clauses, clause);
+      else {
+        syntax_error(loc_from_token(parser, Current()), "expecting pattern following pipe\n");
+        sync(parser);
+        break;
+      }
+    }
+    else break;
+  } while(match(Tkn_Comma));
+
+  return new_matchif(cond, clauses, loc_from_token(parser, Current()));
+}
+
+Expr* parse_if_body(Parser* parser, Expr* cond) {
+  Debug();
+  Expr* body = parse_block_expr(parser);
+  Expr* else_if = NULL;
+  if(match(Tkn_Else)) {
+    if(check(Tkn_If))
+      else_if = parse_if_expr(parser);
+    else
+      else_if = parse_block_expr(parser);
+  }
+  SourceLoc loc = cond->loc;
+  loc = expand_loc(loc, body->loc);
+  if(else_if)
+    loc = expand_loc(loc, else_if->loc);
+  return new_if(cond, body, else_if, loc);
+}
+
+bool requires_semicolon(Expr* expr) {
+  if(!expr) return false;
+  switch(expr->kind) {
+    case If:
+    case While:
+    case For:
+      return false;
+    default:
+      return true;
+  }
+}
+
 Stmt* parse_stmt(Parser* parser) {
   Debug();
   Token current = Current();
@@ -479,7 +791,7 @@ Stmt* parse_stmt(Parser* parser) {
 
   if(expr) {
     SourceLoc loc = expr->loc;
-    if(match(Tkn_Semicolon)) {
+    if(requires_semicolon(expr) and match(Tkn_Semicolon)) {
       loc.span += 1;
       return new_semi_stmt(expr, loc);
     }
@@ -487,10 +799,6 @@ Stmt* parse_stmt(Parser* parser) {
       return new_expr_stmt(expr, loc);
   }
   return NULL;
-}
-
-TypeSpec* expr_to_name_type(Expr* name) {
-
 }
 
 TypeSpec* expr_to_typespec(Expr* expr) {
@@ -510,9 +818,41 @@ TypeSpec* expr_to_typespec(Expr* expr) {
   }
 }
 
-TypeSpec* parse_typespec(Parser* parser) {
+TypeSpec* parse_name_or_path(Parser* parser);
 
+TypeSpec* parse_typespec(Parser* parser) {
+  Debug();
+  Token current = Current();
+
+  switch(current.kind) {
+    case Tkn_Identifier:
+      return parse_name_or_path(parser);
+    default:;
+  }
+  return NULL;
 }
+
+TypeSpec* parse_name_typespec(Parser* parser) {
+  Debug();
+  Ident* ident = parse_ident(parser);
+  // parse genarics
+  return new_name_typespec(ident, 1, ident->loc);
+}
+
+TypeSpec* parse_name_or_path(Parser* parser) {
+  Debug();
+  TypeSpec* spec = parse_name_typespec(parser);
+  for(;;) {
+    if(Current().kind == Tkn_Period) {
+      Consume();
+      TypeSpec* elem = parse_name_typespec(parser);
+      spec = new_path_typespec(spec, elem, 1, expand_loc(spec->loc, elem->loc));
+    }
+    else break;
+  }
+  return spec;
+}
+
 
 void sync(Parser* parser) {
 
@@ -521,8 +861,9 @@ void sync(Parser* parser) {
 void parse_test(File* file) {
   Parser parser = new_parser(file);
 
-  Expr* expr = parse_expr(&parser);
 
+  Expr* expr = parse_expr(&parser);
+  // print_pattern(pat);
   print_expr(expr);
 }
 

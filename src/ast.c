@@ -154,18 +154,18 @@ Expr* new_literal(Token token, SourceLoc loc) {
   return expr;
 }
 
+Expr* new_compoundliteral(Expr** elems, SourceLoc loc) {
+  Expr* expr = new_expr(CompoundLiteral, loc);
+  expr->comp_lit.elems = elems;
+  expr->comp_lit.num_elems = buf_len(elems);
+  return expr;
+}
+
 Expr* new_structliteral(TypeSpec* name, Expr** members, SourceLoc loc) {
   Expr* expr = new_expr(StructLiteral, loc);
   expr->struct_lit.name = name;
   expr->struct_lit.members = members;
   expr->struct_lit.num_members = buf_len(members);
-  return expr;
-}
-
-Expr* new_compoundliteral(Expr** members, SourceLoc loc) {
-  Expr* expr = new_expr(CompoundLiteral, loc);
-  expr->compound_lit.members = members;
-  expr->compound_lit.num_members = buf_len(members);
   return expr;
 }
 
@@ -216,6 +216,14 @@ Expr* new_if(Expr* cond, Expr* body, Expr* else_if, SourceLoc loc) {
   return expr;
 }
 
+Expr* new_matchif(Expr* cond, Clause** body, SourceLoc loc) {
+  Expr* expr = new_expr(MatchIf, loc);
+  expr->matchif_expr.cond = cond;
+  expr->matchif_expr.body = body;
+  expr->matchif_expr.num_body = buf_len(body);
+  return expr;
+}
+
 //Expr* new_iflet() {
 //  Expr* expr = new_expr(FnCall, loc);
 //  return expr;
@@ -228,8 +236,9 @@ Expr* new_while(Expr* cond, Expr* body, SourceLoc loc) {
   return expr;
 }
 
-Expr* new_for(Expr* cond, Expr* body, SourceLoc loc) {
+Expr* new_for(Pattern* pat, Expr* cond, Expr* body, SourceLoc loc) {
   Expr* expr = new_expr(For, loc);
+  expr->for_expr.pat = pat;
   expr->for_expr.cond = cond;
   expr->for_expr.body = body;
   return expr;
@@ -288,6 +297,15 @@ Expr* new_assign(Token op, Expr* variable, Expr* value, SourceLoc loc) {
   expr->assign.variable = variable;
   expr->assign.value = value;
   return expr;
+}
+
+Clause* new_clause(Pattern** patterns, Expr* body, SourceLoc loc) {
+  Clause* clause = (Clause*) malloc(sizeof(Clause));
+  clause->patterns = patterns;
+  clause->num_patterns = buf_len(patterns);
+  clause->body = body;
+  clause->loc = loc;
+  return clause;
 }
 
 Item* new_item(ItemKind kind, SourceLoc loc) {
@@ -363,6 +381,61 @@ Item* new_itemfield(TypeSpec* type, Ident* name, Expr* init, SourceLoc loc) {
   return item;
 }
 
+Pattern* new_pattern(PatternKind kind, SourceLoc loc) {
+  Pattern* pat = (Pattern*) malloc(sizeof(Pattern));
+  pat->kind = kind;
+  pat->loc = loc;
+  return pat;
+}
+
+Pattern* new_wildcard(Token token, SourceLoc loc) {
+  Pattern* pat = new_pattern(WildCard, loc);
+  pat->wildcard = token;
+  return pat;
+}
+
+Pattern* new_ident_pat(Ident* ident, SourceLoc loc) {
+  Pattern* pat = new_pattern(IdentPattern, loc);
+  pat->ident = ident;
+  return pat;
+}
+
+Pattern* new_struct_pat(TypeSpec* spec, Pattern** elems, SourceLoc loc) {
+  Pattern* pat = new_pattern(StructPattern, loc);
+  pat->structure.path = spec;
+  pat->structure.elems = elems;
+  pat->structure.num_elems = buf_len(elems);
+  return pat;
+}
+
+Pattern* new_tuple_pat(Pattern** elems, SourceLoc loc) {
+  Pattern* pat = new_pattern(TuplePattern, loc);
+  pat->tuple.elems = elems;
+  pat->tuple.num_elems = buf_len(elems);
+  return pat;
+}
+
+
+Pattern* new_ref_pat(Mutablity mut, Pattern* p, SourceLoc loc) {
+  Pattern* pat = new_pattern(RefPattern, loc);
+  pat->ref.mut = mut;
+  pat->ref.pat = p;
+  return pat;
+}
+
+Pattern* new_ptr_pat(Mutablity mut, Pattern* p, SourceLoc loc) {
+  Pattern* pat = new_pattern(PointerPattern, loc);
+  pat->ref.mut = mut;
+  pat->ref.pat = p;
+  return pat;
+}
+
+Pattern* new_literal_pat(Token token, SourceLoc loc) {
+  Pattern* pat = new_pattern(LiteralPattern, loc);
+  pat->literal = token;
+  return pat;
+}
+
 const char* item_string(ItemKind kind) {
 	return item_strings[kind];
 }
@@ -415,16 +488,10 @@ void destroy_expr(Expr* expr) {
     case If: {
 
     } break;
-    case IfLet: {
-
-    } break;
     case While: {
 
     } break;
     case For: {
-
-    } break;
-    case Match: {
 
     } break;
     case Return: {

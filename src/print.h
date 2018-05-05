@@ -21,8 +21,10 @@ void print_expr(Expr* expr);
 //
 //void print_typespec(TypeSpec* spec);
 //
-//void print_pattern(Pattern* pattern);
+void print_pattern(Pattern* pattern);
 //
 //void print_entity(Entity* entity);
+
+void note(const char* msg, ...);
 
 #endif
