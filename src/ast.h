@@ -318,6 +318,7 @@ Clause* new_clause(Pattern** pattern, Expr* body, SourceLoc loc);
 
 #define ITEMKINDS \
   ITEMKIND(ItemLocal) \
+  ITEMKIND(ItemAlias) \
   ITEMKIND(ItemFunction) \
   ITEMKIND(ItemStruct) \
   ITEMKIND(ItemTupleStruct) \
@@ -340,16 +341,21 @@ typedef struct Item {
   union {
     struct {
       Mutablity mut;
-      Ident** names;
+      Pattern** names;
       u32 num_names;
       TypeSpec* type;
       Expr* init;
     } local;
     struct {
       Ident* name;
+      TypeSpec* type;
+    } alias;
+    struct {
+      Ident* name;
       Item** arguments;
       u32 num_args;
       TypeSpec* ret;
+      Expr* body;
     } function;
     struct {
       Ident* name;
@@ -384,8 +390,9 @@ typedef struct Item {
 } Item;
 
 Item* new_item(ItemKind kind, SourceLoc loc);
-Item* new_itemlocal(Ident** names, TypeSpec* type, Expr* init, Mutablity mut, SourceLoc loc);
-Item* new_itemfunction(Ident* name, Item** arguments, TypeSpec* ret, SourceLoc loc);
+Item* new_itemlocal(Pattern** names, TypeSpec* type, Expr* init, Mutablity mut, SourceLoc loc);
+Item* new_itemalias(Ident* name, TypeSpec* type, SourceLoc loc);
+Item* new_itemfunction(Ident* name, Item** arguments, TypeSpec* ret, Expr* body, SourceLoc loc);
 Item* new_itemstruct(Ident* name, Item** fields, SourceLoc loc);
 Item* new_itemtuplestruct(Ident* name, TypeSpec** fields, SourceLoc loc);
 Item* new_itemenum(Item** elems, SourceLoc loc);

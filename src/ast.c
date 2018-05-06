@@ -315,7 +315,7 @@ Item* new_item(ItemKind kind, SourceLoc loc) {
   return item;
 }
 
-Item* new_itemlocal(Ident** names, TypeSpec* type, Expr* init, Mutablity mut, SourceLoc loc) {
+Item* new_itemlocal(Pattern** names, TypeSpec* type, Expr* init, Mutablity mut, SourceLoc loc) {
   Item* item = new_item(ItemLocal, loc);
   item->local.mut = mut;
   item->local.names = names;
@@ -325,12 +325,20 @@ Item* new_itemlocal(Ident** names, TypeSpec* type, Expr* init, Mutablity mut, So
   return item;
 }
 
-Item* new_itemfunction(Ident* name, Item** arguments, TypeSpec* ret, SourceLoc loc) {
+Item* new_itemalias(Ident* name, TypeSpec* type, SourceLoc loc) {
+  Item* item = new_item(ItemAlias, loc);
+  item->alias.name = name;
+  item->alias.type = type;
+  return item;
+}
+
+Item* new_itemfunction(Ident* name, Item** arguments, TypeSpec* ret, Expr* body, SourceLoc loc) {
   Item* item = new_item(ItemFunction, loc);
   item->function.name = name;
   item->function.arguments = arguments;
   item->function.num_args = buf_len(arguments);
   item->function.ret = ret;
+  item->function.body = body;
   return item;
 }
 

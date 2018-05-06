@@ -53,6 +53,8 @@ TypeSpec* expr_to_typespec(Expr* expr);
 
 TypeSpec* parse_typespec(Parser* parser);
 
+Item* parse_item(Parser* parser);
+
 SourceLoc loc_from_token(Parser* parser, Token token) {
   SourceLoc loc;
   loc.file = parser->file;
@@ -688,11 +690,11 @@ Pattern* parse_ident_pattern(Parser* parser) {
   return NULL;
 }
 
-Pattern** parse_patterns(Parser* parser);
+Pattern** parse_patterns(Parser* parser, TokenKind delim);
 
 Clause* parse_clause(Parser* parser) {
   Debug();
-  Pattern** patterns = parse_patterns(parser);
+  Pattern** patterns = parse_patterns(parser, Tkn_Pipe);
   SourceLoc loc;
   if(patterns == NULL)
     syntax_error(loc_from_token(parser, Current()), "expecting pattern in matching if\n");
@@ -705,7 +707,7 @@ Clause* parse_clause(Parser* parser) {
   return new_clause(patterns, expr, loc);
 }
 
-Pattern** parse_patterns(Parser* parser) {
+Pattern** parse_patterns(Parser* parser, TokenKind delim) {
   Debug();
   Pattern** pats = NULL;
   do {
@@ -717,7 +719,7 @@ Pattern** parse_patterns(Parser* parser) {
       syntax_error(loc_from_token(parser, Current()), "expecting pattern in match clause\n");
       sync(parser);
     }
-  } while(match(Tkn_Pipe));
+  } while(match(delim));
   return pats;
 }
 
@@ -780,9 +782,14 @@ Stmt* parse_stmt(Parser* parser) {
   switch(current.kind) {
     case Tkn_Fn:
     case Tkn_Let:
-    case Tkn_Struct:
-      syntax_error(loc_from_token(parser, current), "Unimplemented feature\n");
-      return NULL;
+    case Tkn_Struct: 
+    case Tkn_Enum: {
+      // syntax_error(loc_from_token(parser, current), "Unimplemented feature\n");
+      Item* item = parse_item(parser);
+      if(item->kind == ItemLocal || item->kind == ItemUse)
+        expect(Tkn_Semicolon);
+      return new_item_stmt(item, item->loc);
+    }
     // case Tkn_Enum:
     default:;
   }
@@ -853,6 +860,202 @@ TypeSpec* parse_name_or_path(Parser* parser) {
   return spec;
 }
 
+Item* parse_local_item(Parser* parse);
+Item* parse_function_item(Parser* parse);
+Item* parse_structure_item(Parser* parse);
+Item* parse_tuplestruct_item(Parser* parse);
+Item* parse_enum_item(Parser* parse);
+Item* parse_use_item(Parser* parse);
+Item* parse_module_item(Parser* parse);
+Item* parse_field_item(Parser* parse);
+Item* parse_type_or_tuplestruct(Parser* parser);
+
+
+Item* parse_item(Parser* parser) {
+  switch(Current().kind) {
+    case Tkn_Let:
+      return parse_local_item(parser);
+    case Tkn_Fn:
+      return parse_function_item(parser);
+    case Tkn_Struct:
+      return parse_structure_item(parser);
+    case Tkn_Enum:
+      return parse_enum_item(parser);
+    case Tkn_Use:
+      return parse_use_item(parser);
+    case Tkn_Type:
+      return parse_type_or_tuplestruct(parser);
+  }
+}
+
+Item* parse_local_item(Parser* parser) {
+  Token current = Current();
+  SourceLoc loc = loc_from_token(parser, current);
+
+  expect(Tkn_Let);
+  Mutablity mut = parse_mutability(parser);
+  if(mut == Mutable)
+    loc.span += 3;
+
+  Pattern** patterns = parse_patterns(parser, Tkn_Comma);
+  for(u32 x = 0; x < buf_len(patterns); ++x)
+    loc = expand_loc(loc, patterns[x]->loc);
+
+  TypeSpec* spec = NULL;
+  Expr* init = NULL;
+  if(match(Tkn_Colon)) {
+    spec = parse_typespec(parser);
+    loc = expand_loc(loc, spec->loc);
+  }
+
+  if(match(Tkn_Equal)) {
+    init = parse_expr(parser); 
+    loc = expand_loc(loc, init->loc);
+  }
+
+  if(!spec and !init) {
+    syntax_error(loc_from_token(parser, Current()), "must annotate type without initialization\n");
+  }
+
+  return new_itemlocal(patterns, spec, init, mut, loc);
+}
+
+Item* parse_function_item(Parser* parser) {
+  Token top = Current();
+  expect(Tkn_Fn);
+  SourceLoc loc = loc_from_token(parser, top);
+
+  if(check(Tkn_Identifier)) {
+    Ident* name = parse_ident(parser);
+    
+    expect(Tkn_OpenParen);
+    Item** params = NULL;
+    for(;;) {
+      if(!check(Tkn_Identifier)) {
+        syntax_error(loc_from_token(parser, Current()), "execting an identifer following '('\n");
+        sync(parser);
+        break;
+      }
+      
+      Item* param = parse_field_item(parser);
+      buf_push(params, param);
+      loc = expand_loc(loc, param->loc);
+      
+      if(!match(Tkn_Comma))
+        break;
+    }
+    expect(Tkn_CloseParen);
+    TypeSpec* spec = NULL;
+    Expr* body = NULL;
+    if(!check(Tkn_OpenBracket)) {
+      spec = parse_typespec(parser);
+      if(!spec) {
+        syntax_error(loc_from_token(parser, Current()), "expecting return type, found: '%s'\n", get_token_string(&Current()));
+        sync(parser);
+      }
+      else
+        loc = expand_loc(loc, spec->loc);
+    }
+    if(check(Tkn_OpenBracket)) {
+      body = parse_block_expr(parser);
+    }
+    else {
+      syntax_error(loc_from_token(parser, Current()), "expecting '{'\n");
+    }
+    return new_itemfunction(name, params, spec, body, loc);
+  }
+  else if(is_operator(&Current())) {
+    printf("Overloading of operators is currently unimplemented\n");
+  }
+
+}
+
+Item* parse_structure_item(Parser* parser) {
+  Token top = Current();
+  expect(Tkn_Struct);
+  SourceLoc loc = loc_from_token(parser, top);
+  if(check(Tkn_Identifier)) {
+    Ident* name = parse_ident(parser);
+    
+    expect(Tkn_OpenBracket);
+    Item** fields = NULL;
+    for(;;) {
+      if(check(Tkn_CloseBracket)) break;
+
+      if(!check(Tkn_Identifier)) {
+        syntax_error(loc_from_token(parser, Current()), "execting an identifer following '{'\n");
+        sync(parser);
+        break;
+      }
+      
+      Item* field = parse_field_item(parser);
+      buf_push(fields, field);
+      loc = expand_loc(loc, field->loc);
+      
+      if(!match(Tkn_Comma))
+        break;
+      
+    }
+    expect(Tkn_CloseBracket);
+    return new_itemstruct(name, fields, loc);
+  }
+  syntax_error(loc_from_token(parser, Current()), "expecting ident following keyword 'struct'\n");
+  return NULL;
+}
+
+Item* parse_tuplestruct_item(Parser* parse) {
+
+}
+
+Item* parse_enum_item(Parser* parser) {
+
+}
+
+Item* parse_use_item(Parser* parser) {
+
+}
+
+Item* parse_module_item(Parser* parser) {
+
+}
+
+// field items are only used as a sub item for other items.
+// used by function and structure.
+// similar to local.
+// <ident> <type-annotation>? <initialization>?
+// x: i32
+// x = 1
+// x: i32 = 1
+Item* parse_field_item(Parser* parser) {
+  if(check(Tkn_Identifier)) {
+    Ident* ident = parse_ident(parser);
+    SourceLoc loc = ident->loc;
+    TypeSpec* spec = NULL;
+    Expr* init = NULL;
+    if(match(Tkn_Colon)) {
+      spec = parse_typespec(parser);
+      loc = expand_loc(loc, spec->loc);
+    }
+    
+    if(match(Tkn_Equal)) {
+      init = parse_expr(parser);
+      loc = expand_loc(loc, init->loc);
+    }
+    
+    if(!spec and !init)
+      syntax_error(loc_from_token(parser, Current()), "a type or initial value must be given\n");
+
+    return new_itemfield(spec, ident, init, loc);
+  }
+  // syntax_error
+  // sync(parser);
+  return NULL;
+}
+
+Item* parse_type_or_tuplestruct(Parser* parser) {
+
+}
+
 
 void sync(Parser* parser) {
 
@@ -862,9 +1065,11 @@ void parse_test(File* file) {
   Parser parser = new_parser(file);
 
 
-  Expr* expr = parse_expr(&parser);
+  // Expr* expr = parse_expr(&parser);
+  Stmt* stmt = parse_stmt(&parser);
   // print_pattern(pat);
-  print_expr(expr);
+  // print_expr(expr);
+  print_stmt(stmt);
 }
 
 

@@ -65,6 +65,7 @@
   TOKEN_KIND(Fn, "fn") \
   TOKEN_KIND(Type, "type") \
   TOKEN_KIND(Struct, "struct") \
+  TOKEN_KIND(Enum, "enum") \
   TOKEN_KIND(Break, "break") \
   TOKEN_KIND(Continue, "continue") \
   TOKEN_KIND(Return, "return") \

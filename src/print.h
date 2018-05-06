@@ -15,9 +15,9 @@ void print_literal(Token* token);
 
 void print_expr(Expr* expr);
 //
-//void print_item(Item* item);
+void print_item(Item* item);
 //
-//void print_stmt(Stmt* stmt);
+void print_stmt(Stmt* stmt);
 //
 //void print_typespec(TypeSpec* spec);
 //

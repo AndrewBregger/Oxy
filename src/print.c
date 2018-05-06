@@ -150,18 +150,29 @@ void print_expr_(Expr* expr, int i) {
   }
 }
 
+void print_mutablity(Mutablity mut, int i) {
+  printf("%s%s\n", indent(i), (mut == Immutable? "Immutable" : "Mutable"));
+}
+
 void print_item_(Item* item, int i) {
   if(!item) return;
   printf("%s%s\n", indent(i), item_string(item->kind));
   switch(item->kind) {
     case ItemLocal: {
-
+      print_mutablity(item->local.mut, i + 1);
+      print_pattern_list(item->local.names, item->local.num_names, i + 1);
+      print_typespec_(item->local.type, i + 1);
+      print_expr_(item->local.init, i + 1);
     } break;
     case ItemFunction: {
-
+      print_ident_(item->function.name, i + 1);
+      print_item_list(item->function.arguments, item->function.num_args, i + 1);
+      print_typespec_(item->function.ret, i + 1);
+      print_expr_(item->function.body, i + 1);
     } break;
     case ItemStruct: {
-
+      print_ident_(item->structure.name, i + 1);
+      print_item_list(item->structure.fields, item->structure.num_fields, i + 1);
     } break;
     case ItemTupleStruct: {
 
@@ -176,10 +187,13 @@ void print_item_(Item* item, int i) {
 
     } break;
     case ItemField: {
-
+      print_ident_(item->field.name, i + 1);
+      print_typespec_(item->field.type, i + 1);
+      print_expr_(item->field.init, i + 1);
     } break;
   }
 }
+
 
 void print_stmt_(Stmt* stmt, int i) {
   if(!stmt) return;
@@ -200,6 +214,7 @@ void print_stmt_(Stmt* stmt, int i) {
 
 
 void print_typespec_(TypeSpec* spec, int i) {
+  if(!spec) return;
   printf("%s%s\n", indent(i), typespec_string(spec->kind));
   switch(spec->kind) {
     case TypeSpecNone: {
@@ -212,7 +227,7 @@ void print_typespec_(TypeSpec* spec, int i) {
       print_typespec_(spec->path.elem, i + 1);
     } break;
     case TypeSpecFunc: {
-      
+      // print_ident_(item->function.name, i + 1);
     } break;
     case TypeSpecArray: {
 
@@ -232,9 +247,6 @@ void print_typespec_(TypeSpec* spec, int i) {
   }
 }
 
-void print_mutablity(Mutablity mut, int i) {
-  printf("%s%s\n", indent(i), (mut == Immutable? "Immutable" : "Mutable"));
-}
 void print_pattern_(Pattern* pat, int i) {
   if(!pat) return;
   printf("%s%s\n", indent(i), pattern_string(pat->kind));
@@ -282,4 +294,5 @@ void note(const char* msg, ...) {
 
 void print_literal(Token* token) { print_literal_(token, 0); }
 void print_expr(Expr* expr) { print_expr_(expr, 0); }
+void print_stmt(Stmt* stmt) { print_stmt_(stmt, 0); }
 void print_pattern(Pattern* pat) { print_pattern_(pat, 0); }
