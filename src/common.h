@@ -116,4 +116,26 @@ Map interns;
 const char *str_intern_range(const char *start, const char *end);
 const char *str_intern(const char *str);
 
+u64 string_hash(const char* string, u64 len);
+
+#define TABLE_START 1024
+// a table to store strings only once.
+typedef struct StringTable {
+  char** strings;
+  u64 cap;
+  u64 num;
+} StringTable;
+
+
+StringTable create_table(u64 size);
+void table_rehash(StringTable* table);
+
+// if the string is already in the table then it returns that pointer
+// if it is not then, the string is inserted into the table and returned
+//
+// NOTE: Creates a new copy of the string.
+const char* table_insert_string(StringTable* table, const char* string);
+
+bool table_contains(StringTable* table, const char* string);
+
 #endif

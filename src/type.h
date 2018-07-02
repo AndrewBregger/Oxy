@@ -40,6 +40,7 @@ typedef enum TypeKind {
 typedef struct Type Type;
 typedef struct Expr Expr;
 typedef struct Item Item;
+typedef struct Ident Ident;
 
 typedef struct FunctionType {
 	Type** parameters;
@@ -74,7 +75,7 @@ typedef struct Type {
 
 	union {
 		FunctionType funct;
-		AggragateType agg;
+		AggregateType agg;
 		// EnumType entype;
 		ArrayType arrtype;
 		Type* ptr;

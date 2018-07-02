@@ -6,6 +6,8 @@
 #include "report.h"
 #include "value.h"
 
+#include "queue.c"
+
 extern bool debug;
 
 void debug_checker(const char* funct, u32 line) {
@@ -40,4 +42,8 @@ Checker new_checker(StringTable* table) {
 	checker.queue = new_queue();
 
 	init_globals(&checker);
+}
+
+bool resolve_file(Checker* checker, AstFile* file) {
+	return false;
 }

@@ -54,10 +54,10 @@ Type* new_aggregate_type(Entity** members, Scope* scope, Item* item) {
 	type->agg.item  				= item;
 	type->agg.scope 				= scope;
 
-	if(is_struct_type(type))
-		type->agg.name = type->structure.name;
+	if(is_type_struct(type))
+		type->agg.name = item->structure.name;
 	else
-		type->agg.name = type->enumeration.name;
+		type->agg.name = item->enumeration.name;
 
 	return type;
 }
@@ -139,6 +139,7 @@ const char* type_string(Type* type) {
 	switch(type->kind) {
 		case Type_Function: {
 			sprintf(buffer, "fn(");
+			// add generics here
 			for(u32 i = 0; i < type->funct.num_params; ++i) {
 
 				if(i != 0)
@@ -150,9 +151,8 @@ const char* type_string(Type* type) {
 
 			if(type->funct.ret)
 				strcat(buffer, type_string(type->funct.ret));
+
 		} break;
-		case Type_Struct:
-		case Type_Enum:
 		case Type_Ptr: {
 			sprintf(buffer, "*");
 			strcat(buffer, type_string(type->ptr));
@@ -161,6 +161,10 @@ const char* type_string(Type* type) {
 			sprintf(buffer, "[%llu]", type->arrtype.size.integer_value);
 			strcat(buffer, type_string(type->arrtype.elem));
 		} break;
+		case Type_Aggragate: {
+			sprintf(buffer, "%s", type->agg.name->value);
+			// add generics here
+		}
 		default:
 			return NULL;
 	}
@@ -194,7 +198,7 @@ bool is_primative_type(Type* type) {
 	}
 }
 
-bool is_type_struct(Type* type); {
+bool is_type_struct(Type* type) {
 	if(type->kind == Type_Aggragate)
 		return type->agg.item->kind == ItemStruct;
 	return false;
@@ -230,37 +234,10 @@ bool equivalent_types(Type* type1, Type* type2) {
 			// but the members will be checked for completeness
 			return type1->agg.name->value == type2->agg.name->value;
 		} break;
-		// case Type_Enum: {
-		// 	// no structural type equivalency
-		// 	Item* item1 = type1->entype.item;
-		// 	Item* item2 = type2->entype.item;
-
-		// 	assert(item1 && item1->kind == ItemEnum);
-		// 	assert(item2 && item2->kind == ItemEnum);
-
-		// 	bool equal = item1->enumeration.name->value == item2->enumeration.name->value;
-		// 	if(equal && item1->enumeration.num_elems== item2->enumeration.num_elems) {
-		// 		for(u32 i = 0; i < type1->entype.num_types; ++i) {
-		// 			equal = equivalent_types(type1->entype.sub_types[i], type2->entype.sub_types[i]);
-		// 			if(!equal)
-		// 				return false;
-		// 		}
-		// 		return true;
-		// 	}
-		// 	else
-		// 		return false;
-		// } break;
-		// case Type_Array:
-		// 	return equivalent_types(type1->arrtype.elem, type2->arrtype.elem);
-		// case Type_Ptr:
-		// 	return equivalent_types(type1->ptr, type2->ptr);
-		// default:
-		// 	return false;
-		// }
+		default:
+			return false;
 	}
 }
-
-
 
 i32 type_rank(Type* type) {
 	switch(type->kind) {

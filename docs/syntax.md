@@ -26,7 +26,7 @@ By default, variables are declared as constant.
 let x = 1.0f32
 ```
 
-The mut keyword is used to allow a variable to be mutated (Rust syntax). ':=' syntax can also be used for mutable variable declaration. 
+The mut keyword is used to allow a variable to be mutated (Rust syntax). ':=' syntax can also be used for mutable variable declaration.
 ```
 let mut y = 3.32f64
 let mut z = Vector {x: 1.0, y: 3.0}
@@ -55,7 +55,7 @@ type MyInt = Int
 
 ### Function
 ```
-fn new_vector(x, y, z: f32) z: Vector {
+fn new_vector(x, y, z: f32) z: Vector(f32, 3) {
   z = Vector {
     x: x,
     y: y,
@@ -72,7 +72,7 @@ fn norm(vec: Vector) u32 {
 
 // this could be used as the consume notation
 fn norm(vec: $Vector) u32 {
-  sqrt(vec.x ** 2 + vec.y ** 2 + vec.z ** 2) 
+  sqrt(vec.x ** 2 + vec.y ** 2 + vec.z ** 2)
 }
 
 // the object is referenced
@@ -167,6 +167,11 @@ while x != y {
 
 ### For
 ```
+for x in y {}
+
+for Foo(x, y) in z {}
+
+for (x, y) in z {}
 ```
 
 ### Match
@@ -204,4 +209,19 @@ Foo(...)
 
 (<pat>, <pat>, ...)
 ```
+
+### Polymorphism
+
+## Polymorphic Types
+```
+struct Vec(T, N: u32) {
+  data: [N]T
+}
+
+type Vec3f = Vec(f32, 3);
+type Vec3d = Vec(f64, 3);
+type Quat = Vec(f32, 4);
+type Mat4x4 = Vec(f32, 16);
+```
+
 # Extendend Bakus Naur Form

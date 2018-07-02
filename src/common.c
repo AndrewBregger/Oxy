@@ -252,3 +252,79 @@ const char *str_intern_range(const char *start, const char *end) {
 const char *str_intern(const char *str) {
     return str_intern_range(str, str + strlen(str));
 }
+
+#define FNV_OFFSET 14695981039346656037
+#define FNV_PRIME 1099511628211
+u64 string_hash(const char* string, u64 len) {
+    u64 hash = (u64) FNV_OFFSET;
+
+    for(u64 i = 0; i < len; ++i) {
+        hash *= (u64) FNV_PRIME;
+        hash ^= string[i];
+    }
+
+    return hash;
+
+}
+
+void init_builtin(StringTable* table) {
+    table_insert_string(table, "i8");
+    table_insert_string(table, "i16");
+    table_insert_string(table, "i32");
+    table_insert_string(table, "i64");
+    table_insert_string(table, "u8");
+    table_insert_string(table, "u16");
+    table_insert_string(table, "u32");
+    table_insert_string(table, "u64");
+    table_insert_string(table, "f32");
+    table_insert_string(table, "f64");
+    table_insert_string(table, "bool");
+    table_insert_string(table, "char");
+    table_insert_string(table, "byte");
+    table_insert_string(table, "null");
+
+    table_insert_string(table, "true");
+    table_insert_string(table, "false");
+}
+
+StringTable create_table(u64 size) {
+  StringTable table;
+  table.strings = (char**) malloc(sizeof(char*) * size);
+
+  // set every element to NULL
+  memset(table.strings, 0, sizeof(char*) * size);
+
+  table.cap = size;
+  table.num = 0;
+
+  init_builtin(&table);
+
+  return table;
+}
+
+void table_rehash(StringTable* table) {
+
+}
+
+const char* table_insert_string(StringTable* table, const char* string) {
+  u64 hash = string_hash(string, strlen(string));
+  u64 index = hash % table->cap;
+  if(table_contains(table, string)) {
+    // printf("Using String in table: %s\n", table->strings[index]);
+    return (const char*) table->strings[index];
+  }
+  else {
+    u64 length = strlen(string);
+    table->strings[index] = (char*) malloc(length + 1);
+    strcpy(table->strings[index], string);
+    // printf("Inserting new string in table: %s %p\n", table->strings[index], (void*) table->strings[index]);
+    return (const char*) table->strings[index];
+  }
+}
+
+// for now assume there isnt a collision
+bool table_contains(StringTable* table, const char* string) {
+  u64 hash = string_hash(string, strlen(string));
+  u64 index = hash % table->cap;
+  return table->strings[index] != NULL;
+}

@@ -3,9 +3,10 @@
 
 #include "io.h"
 
-typedef struct Item** ItemSet;
+typedef struct AstFile AstFile;
 
-ItemSet parse_file(File* file);
+
+AstFile* parse_file(File* file, StringTable* table);
 
 void parse_test(File* file);
 
