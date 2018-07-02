@@ -32,8 +32,7 @@ const char* pattern_strings[] = {
 
 Ident* new_ident(const char* name, SourceLoc loc) {
   Ident* ident = malloc(sizeof(Ident));
-  ident->value = malloc(strlen(name) + 1);
-  strcpy(ident->value, name);
+  ident->value = name;
   ident->loc = loc;
   return ident;
 }
@@ -46,7 +45,7 @@ SourceLoc new_sourceloc(File* file, u64 line, u64 column, u64 span) {
 	return loc;
 }
 
-TypeSpec* new_typespec(TypeSpecKind kind, Mutablity mut, SourceLoc loc) {
+TypeSpec* new_typespec(TypeSpecKind kind, Mutability mut, SourceLoc loc) {
 	TypeSpec* spec = malloc(sizeof(TypeSpec));
 	spec->kind = kind;
 	spec->mut = mut;
@@ -54,14 +53,14 @@ TypeSpec* new_typespec(TypeSpecKind kind, Mutablity mut, SourceLoc loc) {
   return spec;
 }
 
-TypeSpec* new_name_typespec(Ident* name, Mutablity mut, SourceLoc loc) {
+TypeSpec* new_name_typespec(Ident* name, Mutability mut, SourceLoc loc) {
 	TypeSpec* spec = new_typespec(TypeSpecName, mut, loc);
   // memory is allocated for the type spec
   spec->name.name = name;
   return spec;
 }
 
-TypeSpec* new_path_typespec(TypeSpec* parent, TypeSpec* elem, Mutablity mut, SourceLoc loc) {
+TypeSpec* new_path_typespec(TypeSpec* parent, TypeSpec* elem, Mutability mut, SourceLoc loc) {
   TypeSpec* spec = new_typespec(TypeSpecPath, mut, loc);
   spec->path.parent = parent;
   spec->path.elem = elem;
@@ -76,33 +75,33 @@ TypeSpec* new_func_typespec(TypeSpec** args, TypeSpec* ret, SourceLoc loc) {
   return spec;
 }
 
-TypeSpec* new_array_typespec(TypeSpec* elem, Expr* size, Mutablity mut, SourceLoc loc) {
-	TypeSpec* spec = new_typespec(TypeSpecArray, mut, loc);
+TypeSpec* new_array_typespec(TypeSpec* elem,/* Expr* size, */SourceLoc loc) {
+	TypeSpec* spec = new_typespec(TypeSpecArray, Immutable, loc);
   spec->array.elem = elem;
-  spec->array.size = size;
+  // spec->array.size = size;
   return spec;
 }
 
-TypeSpec* new_ptr_typespec(TypeSpec* elem, Mutablity mut, SourceLoc loc) {
+TypeSpec* new_ptr_typespec(TypeSpec* elem, Mutability mut, SourceLoc loc) {
 	TypeSpec* spec = new_typespec(TypeSpecPtr, mut, loc);
   spec->ptr.elem = elem;
   return spec;
 }
 
-TypeSpec* new_ref_typespec(TypeSpec* elem, Mutablity mut, SourceLoc loc) {
+TypeSpec* new_ref_typespec(TypeSpec* elem, Mutability mut, SourceLoc loc) {
 	TypeSpec* spec = new_typespec(TypeSpecRef, mut, loc);
   spec->ref.elem = elem;
   return spec;
 }
 
-TypeSpec* new_map_typespec(TypeSpec* key, TypeSpec* val, Mutablity mut, SourceLoc loc) {
+TypeSpec* new_map_typespec(TypeSpec* key, TypeSpec* val, Mutability mut, SourceLoc loc) {
 	TypeSpec* spec = new_typespec(TypeSpecMap, mut, loc);
   spec->map.key = key;
   spec->map.value = val;
   return spec;
 }
 
-TypeSpec* new_tuple_typespec(TypeSpec** types, Mutablity mut, SourceLoc loc) {
+TypeSpec* new_tuple_typespec(TypeSpec** types, Mutability mut, SourceLoc loc) {
 	TypeSpec* spec = new_typespec(TypeSpecTuple, mut, loc);
   spec->tuple.types = types;
   spec->tuple.num_types = buf_len(types);
@@ -299,6 +298,46 @@ Expr* new_assign(Token op, Expr* variable, Expr* value, SourceLoc loc) {
   return expr;
 }
 
+Expr* new_index(Expr* operand, Expr* index, SourceLoc loc) {
+  Expr* expr = new_expr(Index, loc);
+  expr->index.operand = operand;
+  expr->index.index = index;
+  return expr;
+}
+
+Expr* new_tupelelem(Expr* operand, Token elem, SourceLoc loc) {
+  Expr* expr = new_expr(TupleElem, loc);
+  expr->tupleelem.operand = operand;
+  expr->tupleelem.elem = elem;
+  return expr;
+}
+
+Expr* new_range(Expr* start, Expr* end, Expr* step, SourceLoc loc) {
+  Expr* expr = new_expr(Range, loc);
+  expr->range.start = start;
+  expr->range.end = end;
+  expr->range.step = step;
+  return expr;
+}
+
+Expr* new_cast(Expr* op, TypeSpec* spec, SourceLoc loc) {
+  Expr* expr = new_expr(Cast, loc);
+
+  expr->cast.expr = op;
+  expr->cast.spec = spec;
+
+  return expr;
+}
+
+Expr* new_slice(Expr* operand, Expr* start, Expr* end, SourceLoc loc) {
+  Expr* expr = new_expr(Slice, loc);
+  expr->slice.operand = operand;
+  expr->slice.start = start;
+  expr->slice.end = end;
+  return expr;
+}
+
+
 Clause* new_clause(Pattern** patterns, Expr* body, SourceLoc loc) {
   Clause* clause = (Clause*) malloc(sizeof(Clause));
   clause->patterns = patterns;
@@ -315,11 +354,11 @@ Item* new_item(ItemKind kind, SourceLoc loc) {
   return item;
 }
 
-Item* new_itemlocal(Pattern** names, TypeSpec* type, Expr* init, Mutablity mut, SourceLoc loc) {
+Item* new_itemlocal(Pattern* name, TypeSpec* type, Expr* init, Mutability mut, SourceLoc loc) {
   Item* item = new_item(ItemLocal, loc);
   item->local.mut = mut;
-  item->local.names = names;
-  item->local.num_names = buf_len(names);
+  item->local.name = name;
+  // item->local.num_names = buf_len(names);
   item->local.type = type;
   item->local.init = init;
   return item;
@@ -358,8 +397,9 @@ Item* new_itemtuplestruct(Ident* name, TypeSpec** fields, SourceLoc loc) {
   return item;
 }
 
-Item* new_itemenum(Item** elems, SourceLoc loc) {
+Item* new_itemenum(Ident* name, Item** elems, SourceLoc loc) {
   Item* item = new_item(ItemEnum, loc);
+  item->enumeration.name = name;
   item->enumeration.elems = elems;
   item->enumeration.num_elems = buf_len(elems);
   return item;
@@ -386,6 +426,13 @@ Item* new_itemfield(TypeSpec* type, Ident* name, Expr* init, SourceLoc loc) {
   item->field.type = type;
   item->field.name = name;
   item->field.init = init;
+  return item;
+}
+
+Item* new_itemname(Ident* name, Expr* value, SourceLoc loc) {
+  Item* item = new_item(ItemName, loc);
+  item->name.name = name;
+  item->name.value = value;
   return item;
 }
 
@@ -424,14 +471,14 @@ Pattern* new_tuple_pat(Pattern** elems, SourceLoc loc) {
 }
 
 
-Pattern* new_ref_pat(Mutablity mut, Pattern* p, SourceLoc loc) {
+Pattern* new_ref_pat(Mutability mut, Pattern* p, SourceLoc loc) {
   Pattern* pat = new_pattern(RefPattern, loc);
   pat->ref.mut = mut;
   pat->ref.pat = p;
   return pat;
 }
 
-Pattern* new_ptr_pat(Mutablity mut, Pattern* p, SourceLoc loc) {
+Pattern* new_ptr_pat(Mutability mut, Pattern* p, SourceLoc loc) {
   Pattern* pat = new_pattern(PointerPattern, loc);
   pat->ref.mut = mut;
   pat->ref.pat = p;
@@ -441,6 +488,13 @@ Pattern* new_ptr_pat(Mutablity mut, Pattern* p, SourceLoc loc) {
 Pattern* new_literal_pat(Token token, SourceLoc loc) {
   Pattern* pat = new_pattern(LiteralPattern, loc);
   pat->literal = token;
+  return pat;
+}
+
+Pattern* new_range_pat(Pattern* start, Pattern* end, SourceLoc loc) {
+  Pattern* pat = new_pattern(RangePattern, loc);
+  pat->range.start = start;
+  pat->range.end = end;
   return pat;
 }
 
@@ -529,6 +583,7 @@ void destroy_expr(Expr* expr) {
     case Assignment: {
 
     } break;
+    default:;
   }
 }
 
@@ -558,6 +613,7 @@ void destroy_item(Item* item) {
     case ItemField: {
 
     } break;
+    default:;
   }
 }
 
@@ -565,6 +621,7 @@ void destroy_stmt(Stmt* stmt) {
   switch(stmt->kind) {
     case ExprStmt:;
     case ItemStmt:;
+    default:;
   }
 }
 
@@ -594,5 +651,26 @@ void destroy_typesepc(TypeSpec* spec) {
     case TypeSpecTuple: {
 
     } break;
+    default:;
   }
+}
+
+static u32 uid = 0;
+AstFile* new_ast_file(File* file) {
+  AstFile* ast = (AstFile*) malloc(sizeof(AstFile));
+
+  ast->file = file;
+  ast->items = NULL;
+  ast->scope = NULL;
+  ast->uid = uid++;
+
+  return ast;
+}
+
+void add_item(AstFile* file, Item* item) {
+  buf_push(file->items, item);
+}
+
+u32 ast_num_items(AstFile* file) {
+  return buf_len(file->items);
 }

@@ -14,7 +14,7 @@ const char* indent(int i) {
   // tabbing is two spaces
   i *= 2;
   char* buffer = NULL;
-  
+
   while(--i >= 0)
     buf_push(buffer, ' ');
   return buffer;
@@ -57,6 +57,11 @@ void print_item_list(Item** e, u32 num, u32 in) {
 void print_pattern_list(Pattern** p, u32 num, u32 in) {
   for(u32 i = 0; i < num; ++i)
     print_pattern_(p[i], in);
+}
+
+void print_typespec_list(TypeSpec** p, u32 num, u32 in) {
+  for(u32 i = 0; i < num; ++i)
+    print_typespec_(p[i], in);
 }
 
 void print_expr_(Expr* expr, int i) {
@@ -147,10 +152,29 @@ void print_expr_(Expr* expr, int i) {
       print_expr_(expr->assign.variable, i + 1);
       print_expr_(expr->assign.value, i + 1);
     } break;
+    case Index: {
+      print_expr_(expr->index.operand, i + 1);
+      print_expr_(expr->index.index, i + 1);
+    } break;
+    case TupleElem: {
+      print_expr_(expr->tupleelem.operand, i + 1);
+      print_token_(&expr->tupleelem.elem, i + 1);
+    } break;
+    case Range: {
+      print_expr_(expr->range.start, i + 1);
+      print_expr_(expr->range.end, i + 1);
+      print_expr_(expr->range.step, i + 1);
+    } break;
+    case Slice: {
+      print_expr_(expr->slice.operand, i + 1);
+      print_expr_(expr->slice.start, i + 1);
+      print_expr_(expr->slice.end, i + 1);
+    } break;
+    default:;
   }
 }
 
-void print_mutablity(Mutablity mut, int i) {
+void print_mutablity(Mutability mut, int i) {
   printf("%s%s\n", indent(i), (mut == Immutable? "Immutable" : "Mutable"));
 }
 
@@ -160,7 +184,7 @@ void print_item_(Item* item, int i) {
   switch(item->kind) {
     case ItemLocal: {
       print_mutablity(item->local.mut, i + 1);
-      print_pattern_list(item->local.names, item->local.num_names, i + 1);
+      print_pattern_(item->local.name, i + 1);
       print_typespec_(item->local.type, i + 1);
       print_expr_(item->local.init, i + 1);
     } break;
@@ -175,10 +199,12 @@ void print_item_(Item* item, int i) {
       print_item_list(item->structure.fields, item->structure.num_fields, i + 1);
     } break;
     case ItemTupleStruct: {
-
+      print_ident_(item->tuplestruct.name, i + 1);
+      print_typespec_list(item->tuplestruct.fields, item->tuplestruct.num_fields, i + 1);
     } break;
     case ItemEnum: {
-
+      print_ident_(item->enumeration.name, i + 1);
+      print_item_list(item->enumeration.elems, item->enumeration.num_elems, i + 1);
     } break;
     case ItemUse: {
 
@@ -190,6 +216,14 @@ void print_item_(Item* item, int i) {
       print_ident_(item->field.name, i + 1);
       print_typespec_(item->field.type, i + 1);
       print_expr_(item->field.init, i + 1);
+    } break;
+    case ItemAlias: {
+      print_ident_(item->alias.name, i + 1);
+      print_typespec_(item->alias.type, i + 1);
+    } break;
+    case ItemName: {
+      print_ident_(item->name.name, i + 1);
+      print_expr_(item->name.value, i + 1);
     } break;
   }
 }
@@ -216,6 +250,7 @@ void print_stmt_(Stmt* stmt, int i) {
 void print_typespec_(TypeSpec* spec, int i) {
   if(!spec) return;
   printf("%s%s\n", indent(i), typespec_string(spec->kind));
+  print_mutablity(spec->mut, i + 1);
   switch(spec->kind) {
     case TypeSpecNone: {
     } break;
@@ -228,21 +263,24 @@ void print_typespec_(TypeSpec* spec, int i) {
     } break;
     case TypeSpecFunc: {
       // print_ident_(item->function.name, i + 1);
+      print_typespec_list(spec->funct.args, spec->funct.num_args, i + 1);
+      print_typespec_(spec->funct.ret, i + 1);
     } break;
     case TypeSpecArray: {
-
+      print_typespec_(spec->array.elem, i + 1);
     } break;
     case TypeSpecPtr: {
-
+      print_typespec_(spec->ptr.elem, i + 1);
     } break;
     case TypeSpecRef: {
-
+      print_typespec_(spec->ref.elem, i + 1);
     } break;
     case TypeSpecMap: {
-
+      print_typespec_(spec->map.key, i + 1);
+      print_typespec_(spec->map.value, i + 1);
     } break;
     case TypeSpecTuple: {
-
+      print_typespec_list(spec->tuple.types, spec->tuple.num_types, i + 1);
     } break;
   }
 }
@@ -275,7 +313,11 @@ void print_pattern_(Pattern* pat, int i) {
     case LiteralPattern: {
       print_literal_(&pat->literal, i + 1);
     } break;
-
+    case RangePattern: {
+      print_pattern_(pat->range.start, i + 1);
+      print_pattern_(pat->range.end, i + 1);
+    } break;
+    default:;
   }
 }
 
@@ -296,3 +338,4 @@ void print_literal(Token* token) { print_literal_(token, 0); }
 void print_expr(Expr* expr) { print_expr_(expr, 0); }
 void print_stmt(Stmt* stmt) { print_stmt_(stmt, 0); }
 void print_pattern(Pattern* pat) { print_pattern_(pat, 0); }
+void print_item(Item* item) { print_item_(item, 0); }

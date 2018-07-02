@@ -4,7 +4,7 @@
 #include "io.h"
 typedef struct Token Token;
 
-Token* get_tokens(File* file, u32* num);
+Token* get_tokens(File* file, u32* num, StringTable* table);
 
 void scan_test(File* file);
 

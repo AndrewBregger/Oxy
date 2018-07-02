@@ -2,7 +2,7 @@
 #include "token.h"
 #include "print.h"
 #include "report.h"
-
+#include <assert.h>
 #include <ctype.h>
 
 typedef struct Scanner Scanner;
@@ -12,6 +12,27 @@ Token scan_token(Scanner* scanner);
 const char* substr(const char* src, u64 start, u64 len);
 ExpectedType scan_literal_suffix(Scanner* scanner);
 
+const char* table_get_string(StringTable* table, char* string) {
+  u64 index = 0;
+  if(table_contains(table, string)) {
+    u64 hash = string_hash(string, strlen(string));
+    u64 index = hash % table->cap;
+    const char* temp = table->strings[index];
+    buf_free(string);
+    return temp;
+  }
+  else {
+    u32 len = buf_len(string);
+    char* temp = (char*) malloc(sizeof(char) * (len + 1));
+    memcpy(temp, string, len);
+    temp[len] = 0;
+    buf_free(string);
+
+    const char* val = table_insert_string(table, temp);
+    free(temp);
+    return val;
+  }
+}
 
 typedef struct Scanner {
   u64 index;
@@ -20,9 +41,10 @@ typedef struct Scanner {
   const char* source;
   u64 len;
   File* file;
+  StringTable* table;
 } Scanner;
 
-Scanner new_scanner(File* file) {
+Scanner new_scanner(File* file, StringTable* table) {
   Scanner context;
   context.file = file;
   context.index  = 0;
@@ -30,13 +52,14 @@ Scanner new_scanner(File* file) {
   context.column = 1;
   context.source = (const char*) file->content;
   context.len = file->len;
+  context.table = table;
   return context;
 }
 
-Token* get_tokens(File* file, u32* num) {
+Token* get_tokens(File* file, u32* num, StringTable* table) {
   Token* tokens = NULL;
-  Scanner scanner = new_scanner(file);
-  
+  Scanner scanner = new_scanner(file, table);
+  assert(scanner.table->cap == 1024);
   while(true) {
     Token token = scan_token(&scanner);
     print_token(&token);
@@ -123,6 +146,7 @@ bool is_number(char ch) {
 	} break;
 
 Token scan_token(Scanner* scanner) {
+  assert(scanner->table->cap == 1024);
   while(Current(scanner) == '\t' or
         Current(scanner) == ' '  or
         Current(scanner) == '\v' or
@@ -159,13 +183,11 @@ Token scan_token(Scanner* scanner) {
         return BUILD_TOKEN(Tkn_Colon, &save);
       }
       case '.': {
-        if(isdigit(Current(scanner))) {
-          Token token = scan_number(&save, save.index);
-          *scanner = save;
-          return token;
+        if(Check('.', scanner)) {
+          advance(scanner);
+          return new_token(Tkn_PeriodPeriod, save.line, save.column, 2, save.index);
         }
-        else
-          return BUILD_TOKEN(Tkn_Period, &save);
+        return BUILD_TOKEN(Tkn_Period, &save);
       }
       DoubleToken('^', Tkn_Carrot, Tkn_CarrotEqual)
       DoubleToken('%', Tkn_Percent, Tkn_PercentEqual)
@@ -208,13 +230,21 @@ Token scan_identifier(Scanner* scanner) {
     advance(scanner);
 
   const char* str = substr(scanner->source, start, scanner->index - start);
-  
+
+  // clean up the string if it isnt used by the table
+
   TokenKind kind = find_keyword(str);
-  if(kind == Tkn_None)
-    return new_identifier_token(str, scanner->index - start, save.line, save.column, scanner->index - start, save.index);
-  else
+  if(kind == Tkn_None) {
+    const char* temp = table_insert_string(scanner->table, str);
+    // printf("What is the pointer here: %p\n", (void*) temp);
+    free((void*) str);
+    return new_identifier_token(temp, scanner->index - start, save.line, save.column, scanner->index - start, save.index);
+  }
+  else {
+    free((void*) str);
     return new_token(kind, save.line, save.column, strlen(all_token_strings()[kind]),
                      save.index);
+  }
 }
 
 Token scan_string(Scanner* scanner) {
@@ -228,8 +258,10 @@ Token scan_string(Scanner* scanner) {
 
     advance(scanner);
   }
+  // buf_push(buffer, '\0');
   u64 size = scanner->index - save.index;
   advance(scanner);
+  const char* str = table_get_string(scanner->table, buffer);
   return new_string_token(buffer, size, save.line, save.column, size, save.index);
 }
 
@@ -270,7 +302,7 @@ Token scan_number(Scanner* scanner, u64 start) {
   bool scientific_notation = false;
   while(isdigit(Current(scanner)))
     advance(scanner);
-  if(Current(scanner) == '.') {
+  if(Current(scanner) == '.' and (scanner->index + 1 < scanner->len and scanner->source[scanner->index + 1] != '.')) {
     advance(scanner);
     while(isdigit(Current(scanner)))
       advance(scanner);
@@ -309,8 +341,9 @@ Token scan_number(Scanner* scanner, u64 start) {
     else
       token = new_integer_token_type(val, s.line, s.column, scanner->index - start, s.index, type);
   }
-
-  set_string(&token, tmp);
+  const char* n = table_insert_string(scanner->table, tmp);
+  free((void*) tmp);
+  set_string(&token, n);
   return token;
 }
 
@@ -373,13 +406,15 @@ Token scan_comment(Scanner* scanner) {
 		}
 
     return scan_token(scanner);
-    
+
     const char* src = substr(scanner->source, start, scanner->index - start);
     Token token = new_token(Tkn_Comment, save.line, save.column, scanner->index - start, start);
     token.literal.value_string.value = (char*) src;
     token.literal.value_string.len = scanner->index - start;
     return token;
   }
+
+  return BUILD_TOKEN(Tkn_Error, scanner);
 }
 
 
@@ -500,7 +535,8 @@ const char* substr(const char* src, u64 start, u64 len) {
 
 void scan_test(File* file) {
   u32 num;
-  Token* tokens = get_tokens(file, &num);
+  StringTable table = create_table(TABLE_START);
+  Token* tokens = get_tokens(file, &num, &table);
   for(u32 i = 0; i < num; ++i)
     print_literal(tokens + i);
 }

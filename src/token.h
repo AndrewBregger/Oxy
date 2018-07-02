@@ -20,6 +20,7 @@
   TOKEN_KIND(OpenBracket, "{") \
   TOKEN_KIND(CloseBracket, "}") \
   TOKEN_KIND(Period, ".") \
+  TOKEN_KIND(PeriodPeriod, "..") \
   TOKEN_KIND(Comma, ",") \
   TOKEN_KIND(Colon, ":") \
   TOKEN_KIND(Semicolon, ";") \
@@ -81,7 +82,7 @@
   TOKEN_KIND(In, "in") \
   TOKEN_KIND(True, "true") \
   TOKEN_KIND(False, "false")
-  
+
 
 typedef enum TokenKind {
   #define TOKEN_KIND(name, ...) Tkn_##name,
@@ -114,7 +115,7 @@ typedef struct Token {
       u32 len;
     } value_string;
   } literal;
-  
+
   // this is only used for numberic literals
   // it stores the original string value.
   const char* string; // this will be set explicitly
@@ -122,7 +123,7 @@ typedef struct Token {
 
   TokenKind kind;
   ExpectedType type;
-  
+
   u64 line;
   u64 column;
   u64 span;

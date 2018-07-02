@@ -168,6 +168,7 @@ u32 precedence(Token* token) {
     case Tkn_PipeEqual:
     case Tkn_CarrotEqual:
     case Tkn_AstrickAstrickEqual:
+    case Tkn_PeriodPeriod:
       return 1;
     default:
       return 0;

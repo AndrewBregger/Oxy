@@ -34,3 +34,11 @@ void scan_error(File* file, u32 line, u32 column, const char* msg, ...) {
   vprint(msg, va);
   va_end(va);
 }
+
+void check_error(SourceLoc loc, const char* msg, ...) {
+  print_location(loc.file, loc.line, loc.column, "Error:");
+  va_list va;
+  va_start(va, msg);
+  vprint(msg, va);
+  va_end(va);
+}

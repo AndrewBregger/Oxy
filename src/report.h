@@ -10,4 +10,6 @@ void compiler_error(const char* msg, ...);
 
 void scan_error(File* file, u32 line, u32 column, const char* msg, ...);
 
+void check_error(SourceLoc, const char* msg, ...);
+
 #endif

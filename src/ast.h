@@ -42,11 +42,11 @@ typedef enum TypeSpecKind {
 #undef TYPESPECKIND
 } TypeSpecKind;
 
-typedef enum Mutablity {
+typedef enum Mutability {
   None,
   Immutable,
   Mutable,
-} Mutablity;
+} Mutability;
 
 typedef struct SourceLoc {
   File* file;
@@ -56,7 +56,7 @@ typedef struct SourceLoc {
 } SourceLoc;
 
 typedef struct Ident {
-  SourceLoc loc;  
+  SourceLoc loc;
   char* value;
 } Ident;
 
@@ -65,7 +65,7 @@ Ident* new_ident(const char* name, SourceLoc loc);
 
 typedef struct TypeSpec {
   TypeSpecKind kind;
-  Mutablity mut;
+  Mutability mut;
   SourceLoc loc;
   Type* type;
 
@@ -85,7 +85,7 @@ typedef struct TypeSpec {
     } funct;
     struct {
       TypeSpec* elem;
-      Expr* size;
+      // Expr* size;
     } array;
     struct {
       TypeSpec* elem;
@@ -106,24 +106,24 @@ typedef struct TypeSpec {
 
 SourceLoc new_sourceloc(File* file, u64 line, u64 column, u64 span);
 
-TypeSpec* new_typespec(TypeSpecKind kind, Mutablity mut, SourceLoc loc);
+TypeSpec* new_typespec(TypeSpecKind kind, Mutability mut, SourceLoc loc);
 
-TypeSpec* new_name_typespec(Ident* name, Mutablity mut, SourceLoc loc);
+TypeSpec* new_name_typespec(Ident* name, Mutability mut, SourceLoc loc);
 
-TypeSpec* new_path_typespec(TypeSpec* parent, TypeSpec* elem, Mutablity mut, SourceLoc loc);
+TypeSpec* new_path_typespec(TypeSpec* parent, TypeSpec* elem, Mutability mut, SourceLoc loc);
 
 TypeSpec* new_func_typespec(TypeSpec** args, TypeSpec* ret,
   SourceLoc loc);
 
-TypeSpec* new_array_typespec(TypeSpec* elem, Expr* size, Mutablity mut, SourceLoc loc);
+TypeSpec* new_array_typespec(TypeSpec* elem, /* Expr* size,*/ SourceLoc loc);
 
-TypeSpec* new_ptr_typespec(TypeSpec* elem, Mutablity mut, SourceLoc loc);
+TypeSpec* new_ptr_typespec(TypeSpec* elem, Mutability mut, SourceLoc loc);
 
-TypeSpec* new_ref_typespec(TypeSpec* elem, Mutablity mut, SourceLoc loc);
+TypeSpec* new_ref_typespec(TypeSpec* elem, Mutability mut, SourceLoc loc);
 
-TypeSpec* new_map_typespec(TypeSpec* key, TypeSpec* val, Mutablity mut, SourceLoc loc);
+TypeSpec* new_map_typespec(TypeSpec* key, TypeSpec* val, Mutability mut, SourceLoc loc);
 
-TypeSpec* new_tuple_typespec(TypeSpec** types, Mutablity mut, SourceLoc loc);
+TypeSpec* new_tuple_typespec(TypeSpec** types, Mutability mut, SourceLoc loc);
 
 #define STMTKINDS \
   STMTKIND(ExprStmt) \
@@ -178,7 +178,12 @@ Stmt* new_item_stmt(Item* item, SourceLoc loc);
   EXPRKIND(In) \
   EXPRKIND(Tuple) \
   EXPRKIND(PatternExpr) \
-  EXPRKIND(Assignment)
+  EXPRKIND(Index) \
+  EXPRKIND(TupleElem) \
+  EXPRKIND(Assignment) \
+  EXPRKIND(Range) \
+  EXPRKIND(Cast) \
+  EXPRKIND(Slice)
 
 typedef enum ExprKind {
   #define EXPRKIND(n) n,
@@ -288,6 +293,28 @@ typedef struct Expr {
       Expr* variable;
       Expr* value;
     } assign;
+    struct {
+      Expr* operand;
+      Expr* index;
+    } index;
+    struct {
+      Expr* operand;
+      Token elem;
+    } tupleelem;
+    struct  {
+      Expr* start;
+      Expr* end;
+      Expr* step;
+    } range;
+    struct  {
+      Expr* operand;
+      Expr* start;
+      Expr* end;
+    } slice;
+    struct {
+      Expr* expr;
+      TypeSpec* spec;
+    } cast;
   };
 } Expr;
 
@@ -314,6 +341,12 @@ Expr* new_binding(Expr* name, Expr* expr, SourceLoc loc);
 Expr* new_in(Expr* in, Expr* expr, SourceLoc loc);
 Expr* new_tuple(Expr** elem, SourceLoc loc);
 Expr* new_assign(Token op, Expr* variable, Expr* value, SourceLoc loc);
+Expr* new_index(Expr* operand, Expr* index, SourceLoc loc);
+Expr* new_tupelelem(Expr* operand, Token elem, SourceLoc loc);
+Expr* new_range(Expr* start, Expr* end, Expr* step, SourceLoc loc);
+Expr* new_slice(Expr* operand, Expr* start, Expr* end, SourceLoc loc);
+Expr* new_cast(Expr* expr, TypeSpec* spec, SourceLoc loc);
+
 Clause* new_clause(Pattern** pattern, Expr* body, SourceLoc loc);
 
 #define ITEMKINDS \
@@ -325,7 +358,10 @@ Clause* new_clause(Pattern** pattern, Expr* body, SourceLoc loc);
   ITEMKIND(ItemEnum) \
   ITEMKIND(ItemUse) \
   ITEMKIND(ItemModule) \
-  ITEMKIND(ItemField)
+  ITEMKIND(ItemField) \
+  ITEMKIND(ItemName)
+
+// ItemName is only used in Enums
 
 typedef enum ItemKind {
 #define ITEMKIND(n) n,
@@ -337,12 +373,12 @@ typedef struct Item {
   ItemKind kind;
   SourceLoc loc;
 
-
   union {
     struct {
-      Mutablity mut;
-      Pattern** names;
-      u32 num_names;
+      Mutability mut;
+      // Pattern** names;
+      // u32 num_names;
+      Pattern* name;
       TypeSpec* type;
       Expr* init;
     } local;
@@ -368,6 +404,7 @@ typedef struct Item {
       u32 num_fields;
     } tuplestruct;
     struct {
+      Ident* name;
       Item** elems;
       u32 num_elems;
     } enumeration;
@@ -386,19 +423,24 @@ typedef struct Item {
       Ident* name;
       Expr* init;
     } field;
+    struct {
+      Ident* name;
+      Expr* value;
+    } name;
   };
 } Item;
 
 Item* new_item(ItemKind kind, SourceLoc loc);
-Item* new_itemlocal(Pattern** names, TypeSpec* type, Expr* init, Mutablity mut, SourceLoc loc);
+Item* new_itemlocal(Pattern* name, TypeSpec* type, Expr* init, Mutability mut, SourceLoc loc);
 Item* new_itemalias(Ident* name, TypeSpec* type, SourceLoc loc);
 Item* new_itemfunction(Ident* name, Item** arguments, TypeSpec* ret, Expr* body, SourceLoc loc);
 Item* new_itemstruct(Ident* name, Item** fields, SourceLoc loc);
 Item* new_itemtuplestruct(Ident* name, TypeSpec** fields, SourceLoc loc);
-Item* new_itemenum(Item** elems, SourceLoc loc);
+Item* new_itemenum(Ident* name, Item** elems, SourceLoc loc);
 Item* new_itemuse(Ident* name, Expr** memebers, SourceLoc loc);
 Item* new_itemmodule(Ident* name, Item** memebers, SourceLoc loc);
 Item* new_itemfield(TypeSpec* type, Ident* name, Expr* init, SourceLoc loc);
+Item* new_itemname(Ident* name, Expr* value, SourceLoc loc);
 
 #define PATTERNKINDS \
   PATTERNKIND(WildCard)\
@@ -407,7 +449,8 @@ Item* new_itemfield(TypeSpec* type, Ident* name, Expr* init, SourceLoc loc);
   PATTERNKIND(RefPattern) \
   PATTERNKIND(PointerPattern) \
   PATTERNKIND(IdentPattern) \
-  PATTERNKIND(LiteralPattern)
+  PATTERNKIND(LiteralPattern) \
+  PATTERNKIND(RangePattern)
 
 
 typedef enum PatternKind {
@@ -427,20 +470,24 @@ typedef struct Pattern {
     struct {
       TypeSpec* path;
       Pattern** elems;
-      u32 num_elems; 
+      u32 num_elems;
     } structure;
     struct {
       Pattern** elems;
-      u32 num_elems; 
+      u32 num_elems;
     } tuple;
     struct {
-      Mutablity mut;
+      Mutability mut;
       Pattern* pat;
     } ref;
     struct {
-      Mutablity mut;
+      Mutability mut;
       Pattern* pat;
     } ptr;
+    struct {
+      Pattern* start;
+      Pattern* end;
+    } range;
   };
 } Pattern;
 
@@ -454,17 +501,36 @@ Pattern* new_struct_pat(TypeSpec* spec, Pattern** elems, SourceLoc loc);
 
 Pattern* new_tuple_pat(Pattern** elems, SourceLoc loc);
 
-Pattern* new_ref_pat(Mutablity mut, Pattern* pat, SourceLoc loc);
+Pattern* new_ref_pat(Mutability mut, Pattern* pat, SourceLoc loc);
 
-Pattern* new_ptr_pat(Mutablity mut, Pattern* pat, SourceLoc loc);
+Pattern* new_ptr_pat(Mutability mut, Pattern* pat, SourceLoc loc);
 
 Pattern* new_literal_pat(Token token, SourceLoc loc);
+
+Pattern* new_range_pat(Pattern* start, Pattern* end, SourceLoc loc);
 
 const char* item_string(ItemKind kind);
 const char* expr_string(ExprKind kind);
 const char* stmt_string(StmtKind kind);
 const char* pattern_string(PatternKind kind);
 const char* typespec_string(TypeSpecKind kind);
+
+
+typedef Item** ItemSet;
+typedef struct Scope Scope;
+
+typedef struct AstFile {
+  ItemSet items;
+  File* file;
+  Scope* scope;
+  u32 uid;
+} AstFile;
+
+AstFile* new_ast_file(File* file);
+
+void add_item(AstFile* file, Item* item);
+
+u32 ast_num_items(AstFile* file);
 
 void destroy_expr(Expr* expr);
 void destroy_item(Item* expr);

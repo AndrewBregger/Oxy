@@ -1,0 +1,33 @@
+// Single Line
+
+/*
+  and mutli line comments.
+  /*
+    imbeddable comments as well.
+  */
+*/
+
+// use modules/external libraries
+//use fmt.{println, write};
+
+/*
+this would have been equivalent.
+use fmt.println;
+use fmt.write;
+
+// imports the entire fmt namespace into file scope.
+use fmt.*;
+
+// imports the namespace fmt into file scope.
+// must use the namespace to access the modules objects.
+//      fmt.println(...)
+//      instead of println(...)
+use fmt;
+*/
+
+//fn main(args: []string) {
+//	"1.0".float.println; // => fmt.println(float("1.0"));
+//}
+
+let x = 1.0;
+let y = x + x;
