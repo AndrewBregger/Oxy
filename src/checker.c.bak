@@ -1,0 +1,796 @@
+#include "common.h"
+#include "checker.h"
+#include "type.h"
+#include "symbol.h"
+#include "parser.h"
+#include "print.h"
+#include "io.h"
+#include "report.h"
+
+#include "queue.c"
+
+extern bool debug;
+
+void debug_checker(const char* funct, u32 line) {
+	if(debug) printf("%s|%u\n", funct, line);
+}
+
+#define Debug() debug_checker(__FUNCTION__, __LINE__)
+
+// TypeMetrics primative_metrics[Num_Types] = {
+// 	[Type_I8]  =  {"i8", 1, 1, 1, 0},
+// 	[Type_I16] =  {"i16", 2, 2, 2, 0},
+// 	[Type_I32] =  {"i32", 4, 4, 3},
+// 	[Type_I64] =  {"i64", 8, 8, 4, 0},
+// 	[Type_U8]  =  {"u8", 1, 1, 1, Unsigned},
+// 	[Type_U16] =  {"u16", 2, 2, 2, Unsigned},
+// 	[Type_U32] =  {"u32", 4, 4, 3, Unsigned},
+// 	[Type_U64] =  {"u64", 8, 8, 4, Unsigned},
+// 	[Type_Bool] = {"bool", 8, 8, 4, Unsigned},
+// 	[Type_Char] = {"char", 8, 8, 4, Unsigned},
+// 	[Type_F32] = {"f32", 4, 4, 5, Unsigned},
+// 	[Type_F64] = {"f64", 8, 8, 6, Unsigned},
+// }
+
+void init_global_types(Checker* checker);
+void init_global_constant(Checker* checker);
+
+bool type_convertable(Type* type1, Type* type2);
+
+Type* bool_t = NULL;
+Type* i8_t = NULL;
+Type* i16_t = NULL;
+Type* i32_t = NULL;
+Type* i64_t = NULL;
+Type* u8_t = NULL;
+Type* u16_t = NULL;
+Type* u32_t = NULL;
+Type* u64_t = NULL;
+Type* null_t = NULL;
+// Type* string_t = NULL;
+Type* char_t = NULL;
+Type* f32_t = NULL;
+Type* f64_t = NULL;
+
+Checker new_checker(StringTable* table) {
+	Checker ch = {0};
+
+	ch.files = NULL;
+	ch.global_scope = NULL;
+	ch.current_scope = NULL;
+	ch.string_table = table;
+	ch.queue = new_queue();
+
+	return ch;
+}
+
+// adds entity to current scope
+void checker_add_entity(Checker* checker, Entity* entity) {
+	add_entity(checker->current_scope, entity->name->value, entity);
+}
+
+
+void checker_add_type(Checker* checker, Type* type) {
+	buf_push(&checker->types, type);
+}
+
+void init_globals(Checker* checker) {
+
+	checker->global_scope = new_scope(Scope_Global, NULL);
+	checker->current_scope = checker->global_scope;
+
+	init_global_types(checker);
+
+	init_global_constant(checker);
+
+	// init_built_ins(checker);
+}
+
+Entity* checker_lookup_string(Checker* checker, const char* name) {
+	return get_entity(checker->current_scope, name);
+}
+
+Entity* checker_lookup(Checker* checker, Ident* name) {
+	if(debug) printf("Looking up: '%s'\n", name->value);
+	return checker_lookup_string(checker, (const char*) name->value);
+}
+
+void checker_push_queue(Checker* checker, Entity* entity) {
+
+}
+
+
+Type* new_global_type(Checker *checker, TypeKind kind, const char* name, u32 size);
+
+void init_global_types(Checker* checker) {
+	bool_t = new_global_type(checker, Type_Bool, table_insert_string(checker->string_table, "bool"), 1);
+	i8_t = new_global_type(checker, Type_I8, table_insert_string(checker->string_table, "i8"), 1);
+	i16_t = new_global_type(checker, Type_I16, table_insert_string(checker->string_table, "i16"), 2);
+	i32_t = new_global_type(checker, Type_I32, table_insert_string(checker->string_table, "i32"), 4);
+	i64_t = new_global_type(checker, Type_I64, table_insert_string(checker->string_table, "i64"), 8);
+	u8_t = new_global_type(checker, Type_U8, table_insert_string(checker->string_table, "u8"), 1);
+	u16_t = new_global_type(checker, Type_U16, table_insert_string(checker->string_table, "u16"), 2);
+	u32_t = new_global_type(checker, Type_U32, table_insert_string(checker->string_table, "u32"), 4);
+	u64_t = new_global_type(checker, Type_U64, table_insert_string(checker->string_table, "u64"), 8);
+	null_t = new_global_type(checker, Type_Null, table_insert_string(checker->string_table, "Null"), 0);
+	char_t = new_global_type(checker, Type_Char, table_insert_string(checker->string_table, "char"), 1);
+
+	f32_t = new_global_type(checker, Type_F32, table_insert_string(checker->string_table, "f32"), 4);
+	f64_t = new_global_type(checker, Type_F64, table_insert_string(checker->string_table, "f64"), 8);
+}
+
+Type* new_global_type(Checker *checker, TypeKind kind, const char* name, u32 size) {
+	Type* type = new_type(kind, size);
+	type->name = name;
+
+	Ident* ident = new_ident(name, (SourceLoc) {0});
+
+	Entity* entity = new_type_entity(ident, type);
+
+	assert(checker->global_scope == checker->current_scope);
+
+	checker_add_entity(checker, entity);
+	checker_add_type(checker, type);
+
+	return type;
+}
+
+void init_global_value(Checker* checker, const char* name, Value value, Type* type);
+
+void init_global_constant(Checker* checker) {
+	init_global_value(checker, "true", new_bool_value(true), bool_t);
+	init_global_value(checker, "false", new_bool_value(false), bool_t);
+	init_global_value(checker, "null", new_null_value(), null_t);
+}
+
+void init_global_value(Checker* checker, const char* name, Value value, Type* type) {
+	Ident* ident = new_ident(name, (SourceLoc) {0});
+	Entity* c = new_constant_entity(value, NULL, ident, type);
+
+	assert(checker->global_scope == checker->current_scope);
+
+	checker_add_entity(checker, c);
+}
+
+
+Scope* push_scope(Checker* checker, ScopeKind kind) {
+	Scope* scope = new_scope(kind, checker->current_scope);
+	checker->current_scope = scope;
+	return scope;
+}
+
+void pop_scope(Checker* checker) {
+	checker->current_scope = checker->current_scope->parent;
+}
+
+// Result, represent the result of evaluation an expression
+// 	the result is either a type or a value.
+typedef struct Result {
+	Expr* expr;
+	Type* type;
+	Value value;
+} Result;
+
+void resolve_local_item(Checker* checker, Item* item);
+void resolve_struct_item(Checker* checker, Item* item);
+void resolve_field_item(Checker* checker, Item* item, Entity* parent);
+
+Result resolve_expr(Checker* checker, Expr* expr);
+
+Result resolve_binary_expr(Checker* checker, Token op, Expr* lhs, Expr* rhs);
+
+Type* resolve_typespec(Checker* checker, TypeSpec* spec);
+
+// if the pattern has sub patterns then check those.
+// otherwise, the types of the ident is the type given.
+bool resolve_pattern_from_type(Checker* checker, Pattern* pattern, Type* type) {
+	switch(pattern->kind) {
+		case WildCard: {
+			// ignore, type dont matter
+		} break;
+	  case StructPattern: {
+	  	Type* t1 = resolve_typespec(checker, pattern->structure.path);
+	  	if(equivalent_types(t1, type)) {
+	  		for(u32 i = 0; i < pattern->structure.num_elems; ++i)
+	  			if(!resolve_pattern_from_type(checker, pattern->structure.elems[i], type->strtype.members[i]))
+	  				return false;
+	  		return true;
+	  	}
+	  } break;
+	  case TuplePattern: {
+
+	  } break;
+	  case RefPattern: {
+	  	check_error(pattern->loc, "reference pattern is not implemented\n");
+	  } break;
+	  case PointerPattern: {
+	  	Type* ptr_type = new_ptr(type);
+	  	Pattern* id = pattern->ptr.pat;
+
+	  	assert(id->kind = IdentPattern);
+	  	Ident* name = id->ident;
+	  	Mutability mut = pattern->ptr.mut;
+
+	  	Entity* entity = new_local_entity(NULL, name, ptr_type);
+	  	entity->immutable = mut == Immutable;
+	  	entity->pattern = pattern;
+
+	  	checker_add_entity(checker, entity);
+	  } break;
+	  case IdentPattern: {
+	  	Ident* name = pattern->ident;
+	  	Mutability mut = pattern->ptr.mut;
+
+	  	Entity* entity = new_local_entity(NULL, name, type);
+	  	entity->pattern = pattern;
+
+	  	checker_add_entity(checker, entity);
+	  } break;
+	  case LiteralPattern: {
+
+	  } break;
+	  case RangePattern: {
+
+	  } break;
+	}
+}
+
+Type* resolve_const_item(Chekcer* checker, Item* item, Entity* parent) {
+}
+
+Type* resolve_local_item(Checker* checker, Item* item, Entity* parent) {
+	Debug();
+
+	Result res = {0};
+	Type* type;
+
+	// check the init expression.
+	if(item->local.init)
+		res = resolve_expr(checker, item->local.init);
+
+	// check the annotated type.
+	if(item->local.type)
+		type = resolve_typespec(checker, item->local.type);
+
+	if(res.type && type) {
+		if(!type_convertable(res.type, type)) {
+			check_error(res.expr->loc, "incompatable types: %s to %s\n",
+				type_string(res.type), type_string(type));
+		}
+	}
+
+	if(!type && res.type)
+		type = res.type;
+
+	resolve_pattern_from_type(checker, item->local.name, type);
+	Ident* ident = NULL;
+	if(item->local.name->kind == IdentPattern)
+		ident = item->local.name->ident;
+	if(item->local.name->kind == PointerPattern)
+		ident = item->local.name->ptr.pat->ident;
+
+	if(ident) {
+		Entity* entity = checker_lookup(checker, ident);
+		entity->immutable = item->local.mut == Immutable;
+	}
+
+	// Entity* local = new_local_entity(item, item->name, type);
+	// checker_add_entity(checker, local);
+}
+
+Type* resolve_struct_item(Checker* checker, Item* item, Entity* parent) {
+		if(item->kind == ItemTupleStruct)
+		return;
+
+	Entity* e = checker_lookup(checker, item->structure.name);
+
+	if(e) {
+		if(e->scope == checker->current_scope) {
+			check_error(item->structure.name->loc, "redeclaration of type with name: '%s'\n", item->structure.name->value);
+			return;
+		}
+	}
+
+	// now we know there isn't an entity that has the same name in the same scope.
+
+	// fill in the rest once the rest of the structure has been built.
+	Entity* entity = new_struct_entity(item, item->structure.name, NULL, NULL);
+	entity->state = EntityResolving;
+
+	push_scope(checker, Scope_Struct);
+
+	for (u32 i = 0; i < item->structure.num_fields; ++i)
+		resolve_field_item(checker, item->structure.members[i], entity);
+
+	pop_scope(checker);
+}
+
+Type* resolve_enum_item(Checker* checker, Item* item, Entity* parent) {
+}
+
+Type* resolve_function_item(Checker* checker, Item* item, Entity* parent) {
+}
+
+Type* resolve_alias_item(Checker* checker, Item* item, Entity* parent) {
+}
+
+void resolve_struct_item(Checker* checker, Item* item) {
+
+
+}
+
+Type* resolve_field_item(Checker* checker, Item* item, Entity* parent) {
+	assert(item->kind == ItemField);
+
+	TypeSpec* typespec = item->field.type;
+	Ident* name = item->field.name;
+	Expr* init = item->field.init;
+
+	Result res = {0};
+	Type* type;
+
+	// check the init expression.
+	if(init) {
+		res.expr = init;
+		res = resolve_expr(checker, init);
+	}
+
+	// check the annotated type.
+	if(type)
+		type = resolve_typespec(checker, type);
+
+	if(res.type && type) {
+		if(!type_convertable(res.type, type)) {
+			check_error(res.expr->loc, "incompatable types: %s to %s\n",
+				type_string(res.type), type_string(type));
+		}
+	}
+
+	if(!type && res.type)
+		type = res.type;
+
+}
+
+
+
+Type* type_from_literal(Token token) {
+	// TODO: handle the ExpectedType.
+	switch(token.kind) {
+		case Tkn_IntLiteral:
+			return u32_t;
+	  case Tkn_FloatLiteral:
+			return f32_t;
+	  // case StrLiteral:
+			// return u32_t;
+	  case Tkn_CharLiteral:
+			return char_t;
+		default:
+			return NULL;
+	}
+}
+
+Result resolve_expr(Checker* checker, Expr* expr) {
+	Debug();
+	Result res = {0};
+
+	switch(expr->kind) {
+	  case Name: {
+	  	Entity* e = checker_lookup(checker, expr->name);
+	  	if(!e) {
+	  		check_error(expr->loc, "use of undeclared identifer: '%s'\n", expr->name->value);
+	  		return res;
+	  	}
+	  	if(e->kind == Entity_Local) {
+	  		res.type = e->type;
+	  		printf("Name Type: %s\n", type_string(res.type));
+	  		return res;
+	  	}
+	  } break;
+	  case Literal: {
+	  	printf("Checking token literal: ");
+	  	print_token(&expr->literal);
+	 		Type* type = type_from_literal(expr->literal);
+	 		if(!type)
+	 			check_error(expr->loc, "Compiler Error: Invalid token literal\n");
+
+	 		res.expr = expr;
+	 		res.type = type;
+
+	  	printf("Literal type: %s\n", type_string(res.type));
+
+	 		return res;
+
+	  } break;
+	  case CompoundLiteral: {
+
+	  } break;
+	  case StructLiteral: {
+
+	  } break;
+	  case Unary: {
+
+	  } break;
+	  case Binary: {
+	  	res = resolve_binary_expr(checker, expr->binary.op, expr->binary.lhs, expr->binary.rhs);
+	  	res.expr = expr;
+	  	printf("Binary type: %s\n", type_string(res.type));
+	  } break;
+	  case FnCall: {
+
+	  } break;
+	  case Field: {
+
+	  } break;
+	  case DotFnCall: {
+
+	  } break;
+	  case If: {
+
+	  } break;
+	  case MatchIf: {
+
+	  } break;
+	  case While: {
+
+	  } break;
+	  case For: {
+
+	  } break;
+	  case Return: {
+
+	  } break;
+	  case Break: {
+
+	  } break;
+	  case Continue: {
+
+	  } break;
+	  case Block: {
+
+	  } break;
+	  case Binding: {
+
+	  } break;
+	  case In: {
+
+	  } break;
+	  case Tuple: {
+
+	  } break;
+	  case PatternExpr: {
+
+	  } break;
+	  case Index: {
+
+	  } break;
+	  case TupleElem: {
+
+	  } break;
+	  case Assignment: {
+
+	  } break;
+	  case Range: {
+
+	  } break;
+	  case Slice: {
+
+	  } break;
+	}
+	return res;
+}
+
+Type* resolve_typespec(Checker* checker, TypeSpec* spec) {
+	Debug();
+	switch(spec->kind) {
+	  case TypeSpecNone: {
+	  	check_error(spec->loc, "invalid type specification\n");
+	  	return NULL;
+	  	} break;
+	  case TypeSpecName: {
+	  	Entity* e = checker_lookup(checker, spec->name.name);
+
+	  	printf("%s\n", type_string(e->type));
+
+	  	if(!e) {
+	  		check_error(spec->loc, "use of an undeclared identifier: '%s'\n", spec->name.name->value);
+	  		return NULL;
+	  	}
+	  	else {
+	  		if(is_entity_type(e)) {
+	  			return e->type;
+	  		}
+	  		else {
+	  			check_error(spec->loc, "'%s' is not a type\n", spec->name.name->value);
+	  			return NULL;
+	  		}
+	  	}
+	  } break;
+	  case TypeSpecPath: {
+	  } break;
+	  case TypeSpecFunc: {
+	  } break;
+	  case TypeSpecArray: {
+	  } break;
+	  case TypeSpecPtr: {
+	  	Type* elem = resolve_typespec(checker, spec->ptr.elem);
+	  	if(!elem)
+	  		return NULL;
+
+	  } break;
+	  // case TypeSpecRef: {
+	  // } break;
+	  case TypeSpecMap: {
+	  } break;
+	  case TypeSpecTuple: {
+	  } break;
+	 }
+}
+
+bool is_convertiable(Type* lhs, Type* rhs) {
+	if(lhs == rhs)
+		return true;
+	else if(is_arithmetic_type(lhs) && is_arithmetic_type(rhs))
+		return true;
+	else if(is_ptr_type(lhs)) {
+		// NOTE: maybe this is wrong? - Andrew
+		if(is_ptr_type(rhs))
+			return is_convertiable(lhs->ptr, rhs->ptr);
+		if(is_integer_type(rhs))
+			return true;
+		else if(is_null_type(rhs))
+			return true;
+		else
+			return false;
+	}
+	else if(is_ptr_type(rhs)) {
+		if(is_integer_type(lhs))
+			return true;
+		else if(is_null_type(lhs))
+			return true;
+		else
+			return false;
+	}
+	else
+		return false;
+}
+
+bool type_convertable(Type* type1, Type* type2) {
+	if(type1 == type2)
+		return true;
+
+	if(is_convertiable(type1, type2)) return true;
+
+	if(equivalent_types(type1, type2)) return true;
+
+	return false;
+}
+
+Type* unify_types(Token op, Result* lhs, Result* rhs) {
+	i32 rank_lhs = type_rank(lhs->type);
+	i32 rank_rhs = type_rank(rhs->type);
+	Type* result = NULL;
+
+	if(rank_lhs == -1 || rank_rhs == -1)
+		return NULL;
+	// if they are the same rank then use the larger sized
+	// type.
+	if(rank_lhs == rank_rhs) {
+		if(lhs->type->size < rhs->type->size)
+			result = rhs->type;
+		else
+			result = lhs->type;
+	}
+
+	// if they are different then use the one with the larger rank.
+	if(rank_lhs < rank_rhs)
+		result = rhs->type;
+	else
+		result = lhs->type;
+
+	return result;
+}
+
+Result resolve_binary_op(Checker* checker, Token op, const char* op_name, Result lhs, Result rhs) {
+	Result res = {0};
+	switch(op.kind) {
+		// valid for arithmetic types and pointers
+  	case Tkn_Plus:
+  	case Tkn_PlusEqual:
+  	case Tkn_Minus:
+  	case Tkn_MinusEqual: {
+  		if(is_arithmetic_type(lhs.type) && is_arithmetic_type(rhs.type)) {
+  			res.type = unify_types(op, &lhs, &rhs);
+			}
+			else if(is_ptr_type(lhs.type)) {
+				if(!is_integer_type(rhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(rhs.type), type_string(lhs.type));
+				}
+				res.type = lhs.type;
+			}
+			else if(is_ptr_type(rhs.type)) {
+				if(!is_integer_type(lhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(lhs.type), type_string(rhs.type));
+				}
+				res.type = rhs.type;
+			}
+			else {
+				if(!is_arithmetic_type(lhs.type)) {
+					check_error(lhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(lhs.type), type_string(rhs.type));
+				}
+				else if(!is_arithmetic_type(rhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(rhs.type), type_string(lhs.type));
+				}
+			}
+  	} break;
+
+  	// valid for arithmetic types
+  	case Tkn_Slash:
+  	case Tkn_SlashEqual:
+  	case Tkn_Astrick:
+  	case Tkn_AstrickEqual:
+  	case Tkn_AstrickAstrick:
+  	case Tkn_AstrickAstrickEqual: {
+  		if(is_arithmetic_type(lhs.type) && is_arithmetic_type(rhs.type)) {
+  			res.type = unify_types(op, &lhs, &rhs);
+			}
+			else {
+				if(!is_arithmetic_type(lhs.type)) {
+					check_error(lhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(lhs.type), type_string(rhs.type));
+				}
+				else if(!is_arithmetic_type(rhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(rhs.type), type_string(lhs.type));
+				}
+			}
+		} break;
+
+  	case Tkn_Percent:
+  	case Tkn_PercentEqual: {
+
+  	} break;
+
+
+  	// bit wise operation
+  	// valid for only integer types
+  	case Tkn_LessLess:
+  	case Tkn_LessLessEqual:
+  	case Tkn_GreaterGreater:
+  	case Tkn_GreaterGreaterEqual:
+  	case Tkn_Ampersand:
+  	case Tkn_AmpersandEqual:
+  	case Tkn_Pipe:
+  	case Tkn_PipeEqual:
+  	case Tkn_Carrot:
+  	case Tkn_CarrotEqual:
+  	case Tkn_Tilde: {
+  		if(is_integer_type(lhs.type) && is_integer_type(rhs.type)) {
+  			res.type = unify_types(op, &lhs, &rhs);
+			}
+			else {
+				if(!is_integer_type(lhs.type)) {
+					check_error(lhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(lhs.type), type_string(rhs.type));
+				}
+				else if(!is_integer_type(rhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(rhs.type), type_string(lhs.type));
+				}
+			}
+  	} break;
+
+  	case Tkn_BangEqual:
+  	case Tkn_Equal:
+  	case Tkn_Less:
+  	case Tkn_Greater:
+  	case Tkn_LessEqual:
+  	case Tkn_GreaterEqual:
+  	case Tkn_EqualEqual: {
+  		if(is_arithmetic_type(lhs.type) && is_arithmetic_type(rhs.type)) {
+  			res.type = unify_types(op, &lhs, &rhs);
+			}
+			else {
+				if(!is_arithmetic_type(lhs.type)) {
+					check_error(lhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(lhs.type), type_string(rhs.type));
+				}
+				else if(!is_arithmetic_type(rhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(rhs.type), type_string(lhs.type));
+				}
+			}
+  	} break;
+
+
+  	// TODO: This block could be change such that any arithmetic types
+  	// 				can be used in logical quations.
+  	case Tkn_And:
+  	case Tkn_Or: {
+  		if(is_integer_type(lhs.type) && is_integer_type(rhs.type)) {
+  			res.type = unify_types(op, &lhs, &rhs);
+			}
+			else if(is_bool_type(lhs.type)) {
+				if(!is_integer_type(rhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(rhs.type), type_string(lhs.type));
+				}
+				res.type = lhs.type;
+			}
+			else if(is_bool_type(rhs.type)) {
+				if(!is_integer_type(lhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(lhs.type), type_string(rhs.type));
+				}
+				res.type = rhs.type;
+			}
+			else {
+				if(!is_integer_type(lhs.type)) {
+					check_error(lhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(lhs.type), type_string(rhs.type));
+				}
+				else if(!is_integer_type(rhs.type)) {
+					check_error(rhs.expr->loc, "incompatable types for operator '%s' of type '%s' with type '%s'",
+						op_name, type_string(rhs.type), type_string(lhs.type));
+				}
+			}
+  	}break;
+  	default: {
+  		SourceLoc loc = lhs.expr->loc;
+  		loc.line = op.line;
+  		loc.column = op.column;
+  		loc.span = op.span;
+  		check_error(loc, "unrecognized binary operator: '%s'\n", op_name);
+  	}
+	}
+
+	return res;
+}
+
+Result resolve_binary_expr(Checker* checker, Token op, Expr* lhs, Expr* rhs) {
+	Result res_lhs = resolve_expr(checker, lhs);
+	Result res_rhs = resolve_expr(checker, rhs);
+	const char* op_name = get_string(&op);
+	return resolve_binary_op(checker, op, op_name, res_lhs, res_rhs);
+}
+
+
+void resolve_entity(Checker* checker, Entity* entity, Entity* parent) {
+	switch(entity->kind) {
+		case Entity_Const: {
+			entity->type = resolve_const_item(checker, entity->item, parent);
+		} break;
+		case Entity_Local: {
+
+		} break;
+		case Entity_Alias: {
+
+		} break;
+		case Entity_Struct: {
+
+		} break;
+		case Entity_Enum: {
+
+		} break;
+		case Entity_Funct: {
+
+		} break;
+		case Entity_Type: {
+
+		} break;
+	}
+}
+
+bool resolve_file(Checker* checker, AstFile* ast) {
+	Debug();
+	// create a new scope for the file.
+	ast->scope = push_scope(checker, Scope_File);
+
+	for(u32 i = 0; i < ast_num_items(ast); ++i)
+		resolve_item(checker, ast->items[i]);
+
+	return false;
+}

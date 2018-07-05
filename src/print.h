@@ -5,7 +5,7 @@
 #include "token.h"
 #include "ast.h"
 
-struct Entity;
+typedef struct Entity Entity;
 
 void print_token(Token* token);
 
@@ -23,7 +23,7 @@ void print_stmt(Stmt* stmt);
 //
 void print_pattern(Pattern* pattern);
 //
-//void print_entity(Entity* entity);
+void print_entity(Entity* entity);
 
 void note(const char* msg, ...);
 

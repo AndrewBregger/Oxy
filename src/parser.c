@@ -64,7 +64,7 @@ SourceLoc loc_from_token(Parser* parser, Token token) {
   SourceLoc loc;
   loc.file = parser->file;
   loc.line = token.line;
-  loc.column = token.line;
+  loc.column = token.column;
   loc.span = token.span;
   return loc;
 }

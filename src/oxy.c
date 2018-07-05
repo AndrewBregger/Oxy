@@ -46,13 +46,12 @@ void compile_root(File* file) {
   for(u32 i = 0; i < ast_num_items(ast); ++i)
     print_item(ast->items[i]);
 
-  Checker checker = new_checker(table);
-  init_globals(&checker);
+  // Checker checker = new_checker(table);
 
   // type check
-  if(resolve_file(&checker, ast)) {
+  // if(resolve_file(&checker, ast)) {
     // generate object file
-  }
+  // }
 }
 
 StringTable* get_string_table() {

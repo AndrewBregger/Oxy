@@ -1,0 +1,104 @@
+/// @name Item checking.
+/// @{
+// resolve local variable items/declaration
+// 		this includes resolving initial values and type annotations
+// 		and deteriming that when both are provided, the types are compatable.
+//
+// This method also resolves the declaration pattern with the initializing type.
+// If they do not match then, show were and explain why.
+Type* resolve_local_item(Checker* checker, Item* item, Entity* parent);
+
+// resolves structure/enumerations item/declaration
+//		for each member field, resolve the type or initial value.
+// 		make sure they are compatable.
+//
+// If the resulting type is not complete or found, add the entity to
+// 		a queue to be resolved later.
+Type* resolve_struct_item(Checker* checker, Item* item, Entity* parent);
+Type* resolve_enum_item(Checker* checker, Item* item, Entity* parent);
+
+// Same as local; however, no patterns only identifiers/
+Type* resolve_field_item(Checker* checker, Item* item, Entity* parent);
+
+// Resolves the type for the literal and creates an entity for it
+// in the current scope.
+Type* resolve_const_item(Checker* checker, Item* item, Entity* parent);
+
+// Resolves a function item/declaration
+// 		resolve the name.
+//		for each parameter item, resolve the field
+// 		resolve the return type
+Type* resolve_function_item(Checker* checker, Item* item, Entity* parent);
+
+/// @}
+/// @name Expression checking.
+/// @{
+
+// Resolves the give expression into a result, a result represents
+// a value and/or type. It also stores the expression it is a result of.
+Result resolve_expr(Checker* checker, Expr* expr);
+
+// Resolves the given expression and checks with expected type
+Result resolve_epxected_expr(Checker* checker, Expr* expr, Type* expected_type);
+
+// checks binary expressions specifically
+// wrapper around resolve_binary_op
+Result resolve_binary_expr(Checker* checker, Token op, Expr* lhs, Expr* rhs);
+
+// resolves the given binary operation.
+Result resolve_binary_op(Checker* checker, Token op, const char* op_name,
+	Result lhs, Result rhs);
+
+
+// checks binary expressions specifically
+// wrapper around resolve_binary_op
+Result resolve_unary_expr(Checker* checker, Token op, Expr* expr);
+
+// resolves the given binary operation.
+Result resolve_unary_op(Checker* checker, Token op, const char* op_name,
+	Result expr);
+
+
+Result resolve_name_expr(Checker, Expr* expr);
+
+/// @}
+/// @name Resolves typespec into types.
+/// @{
+
+// Resolves the given typespec into an appropriate type.
+// Either builds one or returns an already built one.
+Type* resolve_typespec(Checker* checker, TypeSpec* spec);
+
+// gets the type from a token.
+Type* type_from_literal(Token token);
+
+// resolve name to type.
+// if defer is true, when the name fails, then do not report it.
+// 				other wise report the failure.
+Type* resolve_type_name(Checker* checker, Ident* name, bool defer);
+
+/// @}
+/// @name Pattern checking.
+/// @{
+
+// resolves a pattern from a type. Trys to check whether the pattern match is valid.
+bool resolve_pattern_from_type(Checker* checker, Pattern* pattern, Type* type);
+
+/// @}
+/// @name Helper functions
+/// @{
+
+bool is_convertiable(Type* lhs, Type* rhs);
+bool type_convertable(Type* type1, Type* type2);
+
+Type* unify_types(Token op, Result* lhs, Result* rhs);
+
+// resolves an Ident into an entity.
+Entity* resolve_name(Checker* checker, Ident* name, bool defer);
+
+// resolves a string into an entity.
+Entity* resolve_name_string(Checker* checker, const char* string, bool defer);
+
+/// @}
+
+void resolve_entity(Checker* checker, Entity* entity, Entity* parent);

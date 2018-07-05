@@ -1,4 +1,6 @@
 #include "print.h"
+#include "entity.h"
+#include "type.h"
 
 void print_expr_(Expr* expr, int i);
 void print_item_(Item* item, int i);
@@ -21,6 +23,10 @@ const char* indent(int i) {
 }
 
 // void print_stmt(Stmt* stmt, int i);
+
+void print_loc(SourceLoc loc) {
+  printf("\t%llu|%llu-%llu", loc.line, loc.column, loc.span);
+}
 
 void print_token(Token* token) {
   printf("Token(%s, %d, %llu, %llu, %llu)\n", get_token_string(token), token->type, token->line, token->column, token->span);
@@ -66,7 +72,9 @@ void print_typespec_list(TypeSpec** p, u32 num, u32 in) {
 
 void print_expr_(Expr* expr, int i) {
   if(!expr) return;
-  printf("%s%s\n", indent(i), expr_string(expr->kind));
+  printf("%s%s", indent(i), expr_string(expr->kind));
+  print_loc(expr->loc);
+  printf("\n");
   switch(expr->kind) {
     case Name: {
       print_ident_(expr->name, i + 1);
@@ -180,7 +188,9 @@ void print_mutablity(Mutability mut, int i) {
 
 void print_item_(Item* item, int i) {
   if(!item) return;
-  printf("%s%s\n", indent(i), item_string(item->kind));
+  printf("%s%s", indent(i), item_string(item->kind));
+  print_loc(item->loc);
+  printf("\n");
   switch(item->kind) {
     case ItemLocal: {
       print_mutablity(item->local.mut, i + 1);
@@ -231,7 +241,9 @@ void print_item_(Item* item, int i) {
 
 void print_stmt_(Stmt* stmt, int i) {
   if(!stmt) return;
-  printf("%s%s\n", indent(i), stmt_string(stmt->kind));
+  printf("%s%s", indent(i), stmt_string(stmt->kind));
+  print_loc(stmt->loc);
+  printf("\n");
   switch(stmt->kind) {
     case ExprStmt:
       print_expr_(stmt->expr, i + 1);
@@ -249,7 +261,9 @@ void print_stmt_(Stmt* stmt, int i) {
 
 void print_typespec_(TypeSpec* spec, int i) {
   if(!spec) return;
-  printf("%s%s\n", indent(i), typespec_string(spec->kind));
+  printf("%s%s", indent(i), typespec_string(spec->kind));
+  print_loc(spec->loc);
+  printf("\n");
   print_mutablity(spec->mut, i + 1);
   switch(spec->kind) {
     case TypeSpecNone: {
@@ -287,7 +301,9 @@ void print_typespec_(TypeSpec* spec, int i) {
 
 void print_pattern_(Pattern* pat, int i) {
   if(!pat) return;
-  printf("%s%s\n", indent(i), pattern_string(pat->kind));
+  printf("%s%s", indent(i), pattern_string(pat->kind));
+  print_loc(pat->loc);
+  printf("\n");
   switch(pat->kind) {
     case WildCard: {
       print_token_(&pat->wildcard, i + 1);
@@ -339,3 +355,22 @@ void print_expr(Expr* expr) { print_expr_(expr, 0); }
 void print_stmt(Stmt* stmt) { print_stmt_(stmt, 0); }
 void print_pattern(Pattern* pat) { print_pattern_(pat, 0); }
 void print_item(Item* item) { print_item_(item, 0); }
+
+
+// void print_entity(Entity* entity) {
+//   if(!entity) return;
+//   printf("%s: %s\n", entity_string(entity), entity->name->value);
+//   printf("\t%s\n", type_string(entity->type));
+//   switch(entity->kind) {
+//     case Entity_Const: {
+//     } break;
+//     case Entity_Local: {
+//     } break;
+//     case Entity_Alias: {
+//     } break;
+//     case Entity_Funct: {
+//     } break;
+//     case Entity_Type: {
+//     } break;
+//   }
+// }

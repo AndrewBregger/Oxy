@@ -21,9 +21,6 @@ typedef struct TypeSpec TypeSpec;
 // extern std::string> stmt_strings;
 
 
-
-
-
 #define TYPESPECKINDS \
   TYPESPECKIND(TypeSpecNone) \
   TYPESPECKIND(TypeSpecName) \
