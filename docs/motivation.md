@@ -3,5 +3,5 @@ After learing about the Pratt operator parser, I felt the desire to build a lang
 
 
 # Implementation Details
-This is implemented in C++ in a C style. The only reason it is not in C is befor the use
+This is implemented in C++ in a C style. The only reason it is not in C is for the use
 of generics and the already implemented containers. 
